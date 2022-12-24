@@ -292,15 +292,6 @@ class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLC
 
   def startIO(pf: HttpRouteIO, sync: Boolean): Task[ExitCode] = {
     start(Routes.of(pf), sync)
-
-    //   val T1: HttpRoute = (request: Request) => pf.lift(request) match {
-    //      case Some(c) => c.flatMap(r => (IO(Option(r))))
-    //      case None    => (IO(None))
-    //    }
-
-    //    val ret : IO[ExitCode] = start( T1 )
-    //    ret
-
   }
 
   def start(R: HttpRoute, sync: Boolean): Task[ExitCode] = {
@@ -319,12 +310,12 @@ class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLC
           thread;
         }
       }*/
-      val e = new java.util.concurrent.ForkJoinPool(cores) //.ForkJoinPool(cores, fjj, (t, e) => System.exit(0), false)
+      //val e = new java.util.concurrent.ForkJoinPool(cores) //.ForkJoinPool(cores, fjj, (t, e) => System.exit(0), false)
       //val e0 = Executors.newFixedThreadPool(cores);
       //val ec = ExecutionContext.fromExecutor(e)
-      //ZIO.executor.map(_.asExecutionContextExecutorService).flatMap(run0(_, R, cores, h2streams, h2IdleTimeOutMs))
-      val ee = zio.Executor.fromJavaExecutor( e )
-      ZIO.onExecutor( ee )( run0( e, R, cores, h2streams, h2IdleTimeOutMs))
+      ZIO.executor.map(_.asExecutionContextExecutorService).flatMap(run0(_, R, cores, h2streams, h2IdleTimeOutMs))
+      //val ee = zio.Executor.fromJavaExecutor( e )
+      //ZIO.onExecutor( ee )( run0( e, R, cores, h2streams, h2IdleTimeOutMs))
 
     } else {
       // Loom test commented out, just FYI
