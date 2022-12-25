@@ -152,10 +152,7 @@ object Http2Connection {
       val lim = buffer.limit() - padLen
       buffer.limit(lim)
       val continue: Boolean = ((flags & Flags.END_STREAM) == 0)
-
-      println( "takeThru and notTakeWhile = " + continue )
-
-      !continue // true if flags has no end stream
+      !continue
     }
 
     //val c = Chunk.fromByteBuffer(b)
@@ -760,9 +757,7 @@ class Http2Connection(
         else
           processInboundGlobalFlowControl(streamId, dataSize) *>
             this.globalInboundWindow.update(_ - dataSize) *>
-            this.incrementGlobalPendingInboundData(dataSize)
-
-      _ <- zio.Console.printLine( "Acum Data = " + bb.remaining() )      
+            this.incrementGlobalPendingInboundData(dataSize)   
       _ <- c.inDataQ.offer(bb)
 
     } yield ()
