@@ -357,7 +357,7 @@ class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLC
         .flatMap(ch1 =>
           ZIO.scoped {
             ZIO
-              .acquireRelease(ZIO.succeed(ch1))(  t => t._1.close().catchAll(e => ZIO.unit)) // handleError!!!!
+              .acquireRelease(ZIO.succeed(ch1))(  t => t._1.close().catchAll(e => errorHandler(e).ignore  )) // handleError!!!!
               .flatMap( t => doConnect( t._1, maxStreams, keepAliveMs, R, t._2) )
           }.fork
         )
@@ -395,7 +395,7 @@ class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLC
         .flatMap(ch1 =>
           ZIO.scoped {
             ZIO
-              .acquireRelease(ZIO.succeed(ch1))(_.close().catchAll(e => ZIO.unit)) // handleError!!!!
+              .acquireRelease(ZIO.succeed(ch1))(_.close().catchAll(e => errorHandler(e).ignore )) // handleError!!!!
               .flatMap(ch => doConnect(ch, maxStreams, keepAliveMs, R, Chunk.empty[Byte]))
           }.fork
         )

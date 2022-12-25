@@ -36,9 +36,7 @@ object MyApp extends ZIOAppDefault {
     case GET -> Root => ZIO.attempt(Response.Ok().asText("OK"))
 
     case req @ POST -> Root => for {
-      _ <- zio.Console.printLine(  "<--------")
       u <- req.stream.runCollect
-        _ <- zio.Console.printLine(  "-------->")
     } yield (Response.Ok().asText("OK:" + String(u.toArray) ))
 
     // perf tests

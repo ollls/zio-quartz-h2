@@ -15,7 +15,7 @@ ThisBuild / developers := List(
 )
 
 ThisBuild / licenses := List("Apache 2" -> new URL("http://www.apache.org/licenses/LICENSE-2.0.txt"))
-ThisBuild / homepage := Some(url("https://github.com/ollls/quartz-h2"))
+ThisBuild / homepage := Some(url("https://github.com/ollls/zio-quartz-h2"))
 
 ThisBuild / pomIncludeRepository := { _ => false }
 ThisBuild / publishTo := {
@@ -27,8 +27,8 @@ ThisBuild / publishMavenStyle := true
 
 ThisBuild / scmInfo := Some(
 ScmInfo(
-    url("https://github.com/ollls/quartz-h2"),
-    "scm:git@github.com:ollls/quartz-h2"
+    url("https://github.com/ollls/zio-quartz-h2"),
+    "scm:git@github.com:ollls/zio-quartz-h2"
   )
 )
 
@@ -38,7 +38,7 @@ Runtime / unmanagedClasspath += baseDirectory.value / "src" / "main" / "resource
 lazy val root = (project in file("."))
   .settings(
     organization := "io.github.ollls",
-    name := "quartz-h2",
+    name := "zio-quartz-h2",
     libraryDependencies += scalaTest % Test,
     libraryDependencies += "dev.zio" %% "zio"  % "2.0.5",
     libraryDependencies += "com.twitter" % "hpack" % "1.0.2",
