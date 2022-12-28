@@ -3,3 +3,17 @@ ZIO2 native, 100% asyncronous Java NIO based implementation of http/2 packet str
 * To run:  sbt IO/run
 * To debug: switch to "debug" or 'trace" in logback-test.xml
 * To access from browser: https://127.0.0.1:8443/IMG_0278.jpeg. ( read log messages and make sure your local file path is OK, also edit path in example/Run scala  )
+
+```scala 
+
+    case GET -> Root / StringVar(file) =>
+      val FOLDER_PATH = "/Users/user_name/web_root/"
+      val FILE = s"$file"
+      val BLOCK_SIZE = 16000
+      for {
+        jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
+      } yield (Response
+        .Ok()
+        .asStream(ZStream.fromFile( jpath )).contentType(ContentType.contentTypeFromFileName(FILE)))
+
+```
