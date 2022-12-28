@@ -51,14 +51,14 @@ object MyApp extends ZIOAppDefault {
 
   
     case GET -> Root / StringVar(file) =>
-      val FOLDER_PATH = "/Users/user_name/web_root/"
+      val FOLDER_PATH = "/Users/user000/web_root/"
       val FILE = s"$file"
       val BLOCK_SIZE = 16000
       for {
         jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
       } yield (Response
         .Ok()
-        .asStream(ZStream.fromFile( jpath )).contentType(ContentType.contentTypeFromFileName(FILE)))
+        .asStream(ZStream.fromFile( jpath, BLOCK_SIZE )).contentType(ContentType.contentTypeFromFileName(FILE)))
 
     // your web site files in the folder "web" under web_root.
     // browser path: https://localhost:8443/web/index.html
