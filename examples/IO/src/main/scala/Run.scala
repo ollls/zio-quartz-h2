@@ -49,21 +49,19 @@ object MyApp extends ZIOAppDefault {
       val ts2 = ts ++ Stream.emits("Block22\n".getBytes())
       IO(Response.Ok().asStream(ts2)) */
 
-    /*  
+  
     case GET -> Root / StringVar(file) =>
       val FOLDER_PATH = "/Users/ostrygun/web_root/"
       val FILE = s"$file"
       val BLOCK_SIZE = 16000
       for {
-        jpath <- IO(new java.io.File(FOLDER_PATH + FILE))
-        jstream <- IO.blocking(new java.io.FileInputStream(jpath))
+        jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
       } yield (Response
         .Ok()
-        .asStream(fs2.io.readInputStream(IO(jstream), BLOCK_SIZE, true))
-        .contentType(ContentType.contentTypeFromFileName(FILE)))
+        .asStream(ZStream.fromFile( jpath )).contentType(ContentType.contentTypeFromFileName(FILE)))
 
     // your web site files in the folder "web" under web_root.
-    // browser path: https://localhost:8443/web/index.html */
+    // browser path: https://localhost:8443/web/index.html
 
     /*
     case req @ GET -> "site" /: _ =>

@@ -48,20 +48,6 @@ lazy val root = (project in file("."))
     libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.3.5",
   )
 
-  // JPL integration
-  // libraryDependencies += "dev.zio" %% "zio-logging-jpl" % "2.1.5"
-  // SLF4j integration  
-  // libraryDependencies += "dev.zio" %% "zio-logging-slf4j" % "2.1.5"
-  // Using ZIO Logging for SLF4j loggers, usually third-party non-ZIO libraries
-
-//libraryDependencies += "dev.zio" %% "zio-logging-slf4j-bridge" % "2.1.5"
-
-
-  lazy val RIO = (project in file("examples/RIO")).dependsOn(root)
-  .settings(
-    name := "example",
-  )
-
     lazy val IO = (project in file("examples/IO")).dependsOn(root)
   .settings(
     name := "example",

@@ -390,7 +390,7 @@ class QuartzH2Server(  HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SS
               ) // handleError!!!!
               .flatMap(t => doConnect(t._1, maxStreams, keepAliveMs, R, t._2))
           }.fork
-        )
+        ).catchAll(e => errorHandler(e).ignore)
         .forever
 
     } yield (ExitCode.success)
@@ -430,7 +430,7 @@ class QuartzH2Server(  HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SS
               .acquireRelease(ZIO.succeed(ch1))(_.close().catchAll(e => errorHandler(e).ignore)) // handleError!!!!
               .flatMap(ch => doConnect(ch, maxStreams, keepAliveMs, R, Chunk.empty[Byte]))
           }.fork
-        )
+        ).catchAll(e => errorHandler(e).ignore)
         .forever
     } yield (ExitCode.success)
   }
