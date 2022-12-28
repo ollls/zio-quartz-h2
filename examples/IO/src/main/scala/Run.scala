@@ -51,7 +51,7 @@ object MyApp extends ZIOAppDefault {
 
   
     case GET -> Root / StringVar(file) =>
-      val FOLDER_PATH = "/Users/ostrygun/web_root/"
+      val FOLDER_PATH = "/Users/user_name/web_root/"
       val FILE = s"$file"
       val BLOCK_SIZE = 16000
       for {
