@@ -14,6 +14,7 @@ ZIO2 native, 100% asyncronous Java NIO based implementation of http/2 packet str
         jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
       } yield (Response
         .Ok()
-        .asStream(ZStream.fromFile( jpath, BLOCK_SIZE )).contentType(ContentType.contentTypeFromFileName(FILE)))
+        .asStream(ZStream.fromFile( jpath, BLOCK_SIZE ))
+        .contentType(ContentType.contentTypeFromFileName(FILE)))
 
 ```
