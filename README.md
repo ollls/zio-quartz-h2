@@ -2,3 +2,4 @@ ZIO2 native, 100% asyncronous Java NIO based implementation of http/2 packet str
 
 * To run:  sbt IO/run
 * To debug: switch to "debug" or 'trace" in logback-test.xml
+* To access from browser: https://127.0.0.1:8443/IMG_0278.jpeg
