@@ -9,7 +9,6 @@ ZIO2 native, 100% asyncronous Java NIO based implementation of http/2 packet str
     case GET -> Root / StringVar(file) =>
       val FOLDER_PATH = "/Users/user_name/web_root/"
       val FILE = s"$file"
-      val BLOCK_SIZE = 16000
       for {
         jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
       } yield (Response
