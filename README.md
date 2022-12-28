@@ -7,7 +7,7 @@ ZIO2 native, 100% asyncronous Java NIO based implementation of http/2 packet str
 ```scala 
 
     case GET -> Root / StringVar(file) =>
-      val FOLDER_PATH = "/Users/ostrygun/web_root/"
+      val FOLDER_PATH = "/Users/user000/web_root/"
       val FILE = s"$file"
       val BLOCK_SIZE = 16000
       for {
