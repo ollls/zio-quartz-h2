@@ -2,7 +2,7 @@ package example
 
 import zio.{ZIO, Task, Chunk, Promise, ExitCode, ZIOApp}
 import zio.ZIOAppDefault
-import zio.stream.ZStream
+import zio.stream.{ ZStream, ZPipeline, ZSink }
 import io.quartz.QuartzH2Server
 import io.quartz.http2._
 import io.quartz.http2.model.{Headers, Method, ContentType, Request, Response}
@@ -18,18 +18,22 @@ import zio.LogLevel
 
 object MyApp extends ZIOAppDefault {
 
+<<<<<<< HEAD
   override val bootstrap = zio.Runtime.removeDefaultLoggers ++ SLF4J.slf4j // (LogLevel.Trace, LogFormat.colored)
 
+=======
+
+  override val bootstrap = zio.Runtime.removeDefaultLoggers ++ SLF4J.slf4j
+  
+>>>>>>> 698f35026c357fd492c5596077ee438a2c034563
   val R: HttpRouteIO = {
-
-    /*
-    case req @ POST -> Root / "upload" / StringVar(_) =>
+    case req @ POST -> Root / "upload" / StringVar(file) =>
+      val FOLDER_PATH = "/Users/user000/web_root/"
+      val FILE = s"$file"
       for {
-        reqPath <- ZIO.attempt(Path("/Users/ostrygun/" + req.uri.getPath()))
-        u <- req.stream.through(Files[IO].writeAll(reqPath)).compile.drain
-        // u <- req.stream.chunks.foreach( c => IO.println( c.size )).compile.drain
-
-      } yield (Response.Ok().asText("OK"))*/
+        jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
+        u <- req.stream.run( ZSink.fromFile( jpath) )
+      } yield (Response.Ok().asText("OK"))
 
     // best path for h2spec
     case GET -> Root => ZIO.attempt(Response.Ok().asText("OK"))

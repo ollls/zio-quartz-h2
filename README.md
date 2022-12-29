@@ -6,7 +6,7 @@ ZIO2 native, 100% asyncronous Java NIO based implementation of http/2 packet str
 
 ```scala 
 
-    case GET -> Root / StringVar(file) =>
+case GET -> Root / StringVar(file) =>
       val FOLDER_PATH = "/Users/user000/web_root/"
       val FILE = s"$file"
       val BLOCK_SIZE = 16000
@@ -18,3 +18,18 @@ ZIO2 native, 100% asyncronous Java NIO based implementation of http/2 packet str
         .contentType(ContentType.contentTypeFromFileName(FILE)))
 
 ```
+
+* File upload ( smart http2 flow control implemented if disk saving speed cannot keep up with inbound network data.) 
+
+```scala 
+
+case req @ POST -> Root / "upload" / StringVar(file) =>
+      val FOLDER_PATH = "/Users/user000/web_root/"
+      val FILE = s"$file"
+      for {
+        jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
+        u <- req.stream.run( ZSink.fromFile( jpath) )
+      } yield (Response.Ok().asText("OK"))
+
+        
+```        
