@@ -27,7 +27,7 @@ object MyApp extends ZIOAppDefault {
       val FILE = s"$file"
       for {
         jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
-        reqPath <- ZIO.attempt(Path("/Users/ostrygun/" + req.uri.getPath()))
+        reqPath <- ZIO.attempt(Path("/Users/user000/" + req.uri.getPath()))
         u <- req.stream.run( ZSink.fromFile( jpath) )
       } yield (Response.Ok().asText("OK"))
 
