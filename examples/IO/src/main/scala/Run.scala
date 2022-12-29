@@ -18,10 +18,6 @@ import zio.LogLevel
 
 object MyApp extends ZIOAppDefault {
 
-
-  override val bootstrap = zio.Runtime.removeDefaultLoggers ++ SLF4J.slf4j // (LogLevel.Trace, LogFormat.colored)
-
-
   override val bootstrap = zio.Runtime.removeDefaultLoggers ++ SLF4J.slf4j
   
   val R: HttpRouteIO = {
