@@ -18,8 +18,7 @@ import zio.LogLevel
 
 object MyApp extends ZIOAppDefault {
 
-
-  override val bootstrap = zio.Runtime.removeDefaultLoggers ++ SLF4J.slf4j //(LogLevel.Trace, LogFormat.colored)
+  override val bootstrap = zio.Runtime.removeDefaultLoggers ++ SLF4J.slf4j // (LogLevel.Trace, LogFormat.colored)
 
   val R: HttpRouteIO = {
 
@@ -35,13 +34,14 @@ object MyApp extends ZIOAppDefault {
     // best path for h2spec
     case GET -> Root => ZIO.attempt(Response.Ok().asText("OK"))
 
-    case req @ POST -> Root => for {
-      u <- req.stream.runCollect
-    } yield (Response.Ok().asText("OK:" + String(u.toArray) ))
+    case req @ POST -> Root =>
+      for {
+        u <- req.stream.runCollect
+      } yield (Response.Ok().asText("OK:" + String(u.toArray)))
 
     // perf tests
     case GET -> Root / "test" => ZIO.attempt(Response.Ok())
-    
+
     /*
     case GET -> Root / "example" =>
       // how to send data in separate H2 packets of various size.
@@ -49,16 +49,18 @@ object MyApp extends ZIOAppDefault {
       val ts2 = ts ++ Stream.emits("Block22\n".getBytes())
       IO(Response.Ok().asStream(ts2)) */
 
-  
     case GET -> Root / StringVar(file) =>
       val FOLDER_PATH = "/Users/user000/web_root/"
       val FILE = s"$file"
       val BLOCK_SIZE = 16000
       for {
         jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
+        present <- ZIO.attempt(jpath.exists())
+        _ <- ZIO.fail(new java.io.FileNotFoundException).when(present == false)
       } yield (Response
         .Ok()
-        .asStream(ZStream.fromFile( jpath, BLOCK_SIZE )).contentType(ContentType.contentTypeFromFileName(FILE)))
+        .asStream(ZStream.fromFile(jpath, BLOCK_SIZE))
+        .contentType(ContentType.contentTypeFromFileName(FILE)))
 
     // your web site files in the folder "web" under web_root.
     // browser path: https://localhost:8443/web/index.html
