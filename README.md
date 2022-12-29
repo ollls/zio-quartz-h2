@@ -24,7 +24,7 @@ case GET -> Root / StringVar(file) =>
 ```scala 
 
 case req @ POST -> Root / "upload" / StringVar(file) =>
-      val FOLDER_PATH = "/Users/ostrygun/web_root/"
+      val FOLDER_PATH = "/Users/user000/web_root/"
       val FILE = s"$file"
       for {
         jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
