@@ -23,11 +23,10 @@ object MyApp extends ZIOAppDefault {
   
   val R: HttpRouteIO = {
     case req @ POST -> Root / "upload" / StringVar(file) =>
-      val FOLDER_PATH = "/Users/user000/web_root/"
+      val FOLDER_PATH = "/Users/ostrygun/web_root/"
       val FILE = s"$file"
       for {
         jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
-        reqPath <- ZIO.attempt(Path("/Users/user000/" + req.uri.getPath()))
         u <- req.stream.run( ZSink.fromFile( jpath) )
       } yield (Response.Ok().asText("OK"))
 
