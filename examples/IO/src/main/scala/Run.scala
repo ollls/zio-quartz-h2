@@ -18,14 +18,12 @@ import zio.LogLevel
 
 object MyApp extends ZIOAppDefault {
 
-<<<<<<< HEAD
+
   override val bootstrap = zio.Runtime.removeDefaultLoggers ++ SLF4J.slf4j // (LogLevel.Trace, LogFormat.colored)
 
-=======
 
   override val bootstrap = zio.Runtime.removeDefaultLoggers ++ SLF4J.slf4j
   
->>>>>>> 698f35026c357fd492c5596077ee438a2c034563
   val R: HttpRouteIO = {
     case req @ POST -> Root / "upload" / StringVar(file) =>
       val FOLDER_PATH = "/Users/user000/web_root/"
