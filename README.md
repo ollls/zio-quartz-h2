@@ -23,15 +23,13 @@ ZIO2 native, 100% asyncronous Java NIO based implementation of http/2 packet str
 
 ```scala 
 
-    case GET -> Root / StringVar(file) =>
-      val FOLDER_PATH = "/Users/user000/web_root/"
+case req @ POST -> Root / "upload" / StringVar(file) =>
+      val FOLDER_PATH = "/Users/ostrygun/web_root/"
       val FILE = s"$file"
-      val BLOCK_SIZE = 16000
       for {
         jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
-      } yield (Response
-        .Ok()
-        .asStream(ZStream.fromFile( jpath, BLOCK_SIZE ))
-        .contentType(ContentType.contentTypeFromFileName(FILE)))
+        u <- req.stream.run( ZSink.fromFile( jpath) )
+      } yield (Response.Ok().asText("OK"))
+
         
 ```        
