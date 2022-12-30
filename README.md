@@ -1,6 +1,6 @@
 ZIO2 native, 100% asyncronous Java NIO based implementation of http/2 packet streaming server with TLS encryption implemented as scala ZIO2 effect. Direct native translation of ZIO ZStream chunks into http2 packets (inbound and outbound).
 
-* Use cases: https://github.com/ollls/zio-quartz-h2/blob/master/examples/IO/src/main/scala/Run.scala
+* Use cases:<br> https://github.com/ollls/zio-quartz-h2/blob/master/examples/IO/src/main/scala/Run.scala
 * To run:  sbt IO/run
 * To debug: switch to "debug" or 'trace" in logback-test.xml
 * To access from browser: https://127.0.0.1:8443/IMG_0278.jpeg. ( read log messages and make sure your local file path is OK, also edit path in example/Run scala  )
@@ -51,9 +51,9 @@ case GET -> Root / StringVar(file) =>
 1. Start server with "sbt IO/run"<br>
 2. ./h2spec http2 -h localhost -p 8443 -t -k<br>
 
-You should get:<br>
+You should get:
 ```
-Finished in 3.7611 seconds<br>
+Finished in 3.7611 seconds
 94 tests, 92 passed, 1 skipped, 1 failed<br>
 ```
 * Performance test with h2load.
