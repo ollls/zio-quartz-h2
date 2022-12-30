@@ -59,7 +59,7 @@ You should get:<br>
 Finished in 3.7611 seconds<br>
 94 tests, 92 passed, 1 skipped, 1 failed<br>
 ```
-* Performance test.
+* Performance test with h2load.
 
 ```
 h2load -D10 -c32 -m20  https://localhost:8443/
