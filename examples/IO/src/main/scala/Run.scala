@@ -2,15 +2,13 @@ package example
 
 import zio.{ZIO, Task, Chunk, Promise, ExitCode, ZIOApp}
 import zio.ZIOAppDefault
-import zio.stream.{ ZStream, ZPipeline, ZSink }
+import zio.stream.{ZStream, ZPipeline, ZSink}
 import io.quartz.QuartzH2Server
 import io.quartz.http2._
 import io.quartz.http2.model.{Headers, Method, ContentType, Request, Response}
 import io.quartz.http2.model.Method._
 import io.quartz.http2.routes.Routes
 import io.quartz.http2.routes.HttpRouteIO
-//import fs2.{Stream, Chunk}
-//import fs2.io.file.{Files, Path}
 
 import zio.logging.LogFormat
 import zio.logging.backend.SLF4J
@@ -19,14 +17,14 @@ import zio.LogLevel
 object MyApp extends ZIOAppDefault {
 
   override val bootstrap = zio.Runtime.removeDefaultLoggers ++ SLF4J.slf4j
-  
+
   val R: HttpRouteIO = {
     case req @ POST -> Root / "upload" / StringVar(file) =>
       val FOLDER_PATH = "/Users/user000/web_root/"
       val FILE = s"$file"
       for {
         jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
-        u <- req.stream.run( ZSink.fromFile( jpath) )
+        u <- req.stream.run(ZSink.fromFile(jpath))
       } yield (Response.Ok().asText("OK"))
 
     // best path for h2spec
@@ -40,12 +38,10 @@ object MyApp extends ZIOAppDefault {
     // perf tests
     case GET -> Root / "test" => ZIO.attempt(Response.Ok())
 
-    /*
     case GET -> Root / "example" =>
       // how to send data in separate H2 packets of various size.
-      val ts = Stream.emits("Block1\n".getBytes())
-      val ts2 = ts ++ Stream.emits("Block22\n".getBytes())
-      IO(Response.Ok().asStream(ts2)) */
+      val ts = ZStream.fromChunks(Chunk.fromArray("Block1\n".getBytes()), Chunk.fromArray("Block22\n".getBytes()))
+      ZIO.attempt(Response.Ok().asStream(ts))
 
     case GET -> Root / StringVar(file) =>
       val FOLDER_PATH = "/Users/user000/web_root/"
@@ -60,22 +56,6 @@ object MyApp extends ZIOAppDefault {
         .asStream(ZStream.fromFile(jpath, BLOCK_SIZE))
         .contentType(ContentType.contentTypeFromFileName(FILE)))
 
-    // your web site files in the folder "web" under web_root.
-    // browser path: https://localhost:8443/web/index.html
-
-    /*
-    case req @ GET -> "site" /: _ =>
-      val FOLDER_PATH = "/Users/ostrygun/web_root/"
-      val BLOCK_SIZE = 16000
-      for {
-        reqPath <- IO(req.uri.getPath())
-        jpath <- IO(new java.io.File(FOLDER_PATH + reqPath))
-        jstream <- IO.blocking(new java.io.FileInputStream(jpath))
-        fname <- IO(jpath.getName())
-      } yield (Response
-        .Ok()
-        .asStream(fs2.io.readInputStream(IO(jstream), BLOCK_SIZE, true))
-        .contentType(ContentType.contentTypeFromFileName(fname))) */
   }
 
   def run =
