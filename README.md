@@ -39,3 +39,16 @@ case GET -> Root / StringVar(file) =>
       }
         
 ```        
+* How to send data in separate H2 packets of various size
+
+```scala 
+
+    case GET -> Root / "example" =>
+      val ts = ZStream.fromChunks(Chunk.fromArray("Block1\n".getBytes()), Chunk.fromArray("Block22\n".getBytes()))
+      ZIO.attempt(Response.Ok().asStream(ts))
+      
+````      
+
+
+
+
