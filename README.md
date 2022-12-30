@@ -24,20 +24,13 @@ case GET -> Root / StringVar(file) =>
 
 ```scala 
 
- case GET -> Root / StringVar(file) =>
+ case req @ POST -> Root / "upload" / StringVar(file) =>
       val FOLDER_PATH = "/Users/user000/web_root/"
       val FILE = s"$file"
-      val BLOCK_SIZE = 16000
       for {
         jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
-        //check for presence, ZStream.fromFile() can be created with wrong path
-        present <- ZIO.attempt(jpath.exists())
-        _ <- ZIO.fail(new java.io.FileNotFoundException).when(present == false)
-      } yield (Response
-        .Ok()
-        .asStream(ZStream.fromFile(jpath, BLOCK_SIZE))
-        .contentType(ContentType.contentTypeFromFileName(FILE)))
-      }
+        u <- req.stream.run(ZSink.fromFile(jpath))
+      } yield (Response.Ok().asText("OK"))
         
 ```        
 * How to send data in separate H2 packets of various size
