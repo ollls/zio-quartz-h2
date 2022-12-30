@@ -13,6 +13,9 @@ case GET -> Root / StringVar(file) =>
       val BLOCK_SIZE = 16000
       for {
         jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
+        present <- ZIO.attempt(jpath.exists())
+        _ <- ZIO.fail(new java.io.FileNotFoundException).when(present == false)
+
       } yield (Response
         .Ok()
         .asStream(ZStream.fromFile( jpath, BLOCK_SIZE ))
