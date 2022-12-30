@@ -49,6 +49,17 @@ case GET -> Root / StringVar(file) =>
       
 ````      
 
+* How to run h2spec:
+
+1. Start server with "sbt IO/run"<br>
+2. ./h2spec http2 -h localhost -p 8443 -t -k<br>
+
+You should get:<br>
+```
+Finished in 3.7611 seconds<br>
+94 tests, 92 passed, 1 skipped, 1 failed<br>
+```
+
 
 
 
