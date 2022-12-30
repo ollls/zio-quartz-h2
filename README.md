@@ -59,6 +59,24 @@ You should get:<br>
 Finished in 3.7611 seconds<br>
 94 tests, 92 passed, 1 skipped, 1 failed<br>
 ```
+* Performance test.
+
+```
+h2load -D10 -c32 -m20  https://localhost:8443/
+
+...
+
+finished in 10.01s, 34663.90 req/s, 711.06KB/s
+requests: 346639 total, 347279 started, 346639 done, 346639 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 346651 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 6.94MB (7281267) total, 338.53KB (346651) headers (space savings 90.00%), 677.03KB (693278) data
+                     min         max         mean         sd        +/- sd
+time for request:      318us    265.96ms     15.88ms     17.08ms    89.69%
+time for connect:     6.51ms    380.04ms    181.23ms    117.08ms    59.38%
+time to 1st byte:     8.39ms    391.14ms    188.94ms    120.61ms    59.38%
+req/s           :    1012.36     1156.19     1082.72       39.02    65.63%
+
+```
 
 
 
