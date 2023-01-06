@@ -14,11 +14,19 @@ import zio.logging.LogFormat
 import zio.logging.backend.SLF4J
 import zio.LogLevel
 
+import io.quartz.util.MultiPart
+
 object MyApp extends ZIOAppDefault {
 
   override val bootstrap = zio.Runtime.removeDefaultLoggers ++ SLF4J.slf4j
+ 
+  //val HOME_DIR = "/Users/user000/tmp1/"
 
   val R: HttpRouteIO = {
+
+    case req @ POST -> Root / "mpart" =>
+      MultiPart.writeAll(req, "/Users/user000/tmp1/" ) *> ZIO.succeed(Response.Ok())
+
     case req @ POST -> Root / "upload" / StringVar(file) =>
       val FOLDER_PATH = "/Users/user000/web_root/"
       val FILE = s"$file"
