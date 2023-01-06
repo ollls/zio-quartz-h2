@@ -36,6 +36,15 @@ case GET -> Root / StringVar(file) =>
       } yield (Response.Ok().asText("OK"))
         
 ```        
+* HTTP Multipart file retrieval.
+
+```scala
+
+ case req @ POST -> Root / "mpart" =>
+      MultiPart.writeAll(req, "/Users/user000/tmp1/" ) *> ZIO.succeed(Response.Ok())
+
+```
+
 * How to send data in separate H2 packets of various size
 
 ```scala 
