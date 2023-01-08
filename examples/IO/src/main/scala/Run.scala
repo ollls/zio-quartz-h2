@@ -9,23 +9,30 @@ import io.quartz.http2.model.{Headers, Method, ContentType, Request, Response}
 import io.quartz.http2.model.Method._
 import io.quartz.http2.routes.Routes
 import io.quartz.http2.routes.HttpRouteIO
+import io.quartz.http2.routes.WebFilter
 
 import zio.logging.LogFormat
 import zio.logging.backend.SLF4J
 import zio.LogLevel
 
 import io.quartz.util.MultiPart
+import io.quartz.http2.model.StatusCode
 
 object MyApp extends ZIOAppDefault {
 
   override val bootstrap = zio.Runtime.removeDefaultLoggers ++ SLF4J.slf4j
- 
-  //val HOME_DIR = "/Users/user000/tmp1/"
+
+  val filter: WebFilter = (r: Request) =>
+    ZIO
+      .succeed(Response.Error(StatusCode.Forbidden).asText("Denied: " + r.uri.getPath()))
+      .when(r.uri.getPath().endsWith("test70.jpeg"))
+
+  // val HOME_DIR = "/Users/user000/tmp1/"
 
   val R: HttpRouteIO = {
 
     case req @ POST -> Root / "mpart" =>
-      MultiPart.writeAll(req, "/Users/user000/tmp1/" ) *> ZIO.succeed(Response.Ok())
+      MultiPart.writeAll(req, "/Users/user000/tmp1/") *> ZIO.succeed(Response.Ok())
 
     case req @ POST -> Root / "upload" / StringVar(file) =>
       val FOLDER_PATH = "/Users/user000/web_root/"
@@ -58,7 +65,7 @@ object MyApp extends ZIOAppDefault {
       for {
         jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
         present <- ZIO.attempt(jpath.exists())
-        _ <- ZIO.fail(new java.io.FileNotFoundException).when(present == false)
+        _ <- ZIO.fail(new java.io.FileNotFoundException( jpath.toString())).when(present == false)
       } yield (Response
         .Ok()
         .asStream(ZStream.fromFile(jpath, BLOCK_SIZE))
@@ -69,7 +76,7 @@ object MyApp extends ZIOAppDefault {
   def run =
     for {
       ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
-      exitCode <- new QuartzH2Server("localhost", 8443, 16000, ctx).startIO(R, sync = false)
+      exitCode <- new QuartzH2Server("localhost", 8443, 16000, ctx).startIO(R, filter, sync = false)
 
     } yield (exitCode)
 
