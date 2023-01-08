@@ -6,6 +6,23 @@ ZIO2 native, 100% asyncronous Java NIO based implementation of http/2 packet str
 * To access from browser: https://127.0.0.1:8443/IMG_0278.jpeg. ( read log messages and make sure your local file path is OK, also edit path in example/Run scala  )
 * You may look at the quartz-h2 CATS port https://github.com/ollls/quartz-h2
 
+* web filter.
+
+```scala
+
+val filter: WebFilter = (r: Request) =>
+    ZIO
+      .succeed(Response.Error(StatusCode.Forbidden).asText("Denied: " + r.uri.getPath()))
+      .when(r.uri.getPath().endsWith("test70.jpeg"))
+   
+...
+...
+...
+
+exitCode <- new QuartzH2Server("localhost", 8443, 16000, ctx).startIO(R, filter, sync = false)
+
+```
+
 * File retrieval.
 
 ```scala 
