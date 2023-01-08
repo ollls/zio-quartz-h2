@@ -1,6 +1,11 @@
 package io.quartz.netio
 
-import java.nio.channels.{AsynchronousChannelGroup, AsynchronousServerSocketChannel, AsynchronousSocketChannel, CompletionHandler}
+import java.nio.channels.{
+  AsynchronousChannelGroup,
+  AsynchronousServerSocketChannel,
+  AsynchronousSocketChannel,
+  CompletionHandler
+}
 import java.util.concurrent.TimeUnit
 import java.nio.channels.Channel
 import zio.{ZIO, Task}
@@ -14,32 +19,6 @@ import java.util.concurrent.Executors
 object TCPChannel {
 
   val HTTP_READ_PACKET = 16384
-
-  def ttt[AsynchronousServerSocketChannel <: Channel, A](
-      ch: AsynchronousServerSocketChannel,
-      op: AsynchronousServerSocketChannel => CompletionHandler[A, Any] => Any
-  ) = {
-    val TTT1 = (cb: ZIO[Any, Throwable, A] => Unit) =>
-      val T = ZIO.attempt(op(ch))
-      T.flatMap(handler => {
-        ZIO
-          .attempt(handler(new CompletionHandler[A, Any] {
-            def completed(result: A, u: Any): Unit = {
-              println("completed")
-              cb(ZIO.succeed(result))
-            }
-            def failed(t: Throwable, u: Any): Unit = {
-              println("failed")
-              t match {
-                case e: Exception => cb(ZIO.fail(e))
-                case _            => cb(ZIO.die(t))
-              }
-            }
-          }))
-        // .map(_ => None)
-      })
-
-  }
 
   /////////////////////////////////
   def effectAsyncChannel[C <: Channel, A](

@@ -315,8 +315,8 @@ class QuartzH2Server(  HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SS
     ia.getHostString()
   }
 
-  def startIO( pf: HttpRouteIO, sync: Boolean): Task[ExitCode] = {
-    start(Routes.of(pf), sync)
+  def startIO( pf: HttpRouteIO, filter : HttpRoute = (r0: Request) => ZIO.succeed( None ), sync: Boolean): Task[ExitCode] = {
+    start(Routes.of(pf, filter), sync)
   }
 
   def start(R: HttpRoute, sync: Boolean): Task[ExitCode] = {

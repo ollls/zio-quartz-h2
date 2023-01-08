@@ -442,7 +442,7 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
     val result = for {
       nb <- rch.readBuffer(IN_J_BUFFER, timeoutMs)
       _ <-
-        if (nb == -1) ZIO.fail(new TLSChannelError("AsynchronousServerTlsByteChannel#read() with -1 "))
+        if (nb == -1) ZIO.fail(new TLSChannelError("netio: aync read() with -1 "))
         else ZIO.unit
 
       _ <- ZIO.attempt(IN_J_BUFFER.flip)
@@ -455,7 +455,7 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
             if (stat == SSLEngineResult.Status.BUFFER_UNDERFLOW || stat == SSLEngineResult.Status.BUFFER_OVERFLOW)
               ZIO.succeed(0)
             else
-              ZIO.fail(new TLSChannelError("AsynchronousTlsByteChannel#read() " + res.toString()))
+              ZIO.fail(new TLSChannelError("read() error, socket closed") )//res.toString()))
           } else ZIO.attempt(IN_J_BUFFER.remaining())
       } yield (rem)
       _        <- loop.repeatWhile(_ != 0)
