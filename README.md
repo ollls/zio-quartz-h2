@@ -20,7 +20,7 @@ def run =
 
 ```
 
-* web filter.
+* Web filter.
 
 ```scala
 
