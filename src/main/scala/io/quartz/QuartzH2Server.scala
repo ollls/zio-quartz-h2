@@ -36,6 +36,7 @@ import io.quartz.http2.model.{Headers, Method, ContentType, Request, Response}
 import io.quartz.http2.model.Method._
 import io.quartz.http2._
 import io.quartz.http2.routes.HttpRoute
+import io.quartz.http2.routes.WebFilter
 import io.quartz.http2.routes.Routes
 import io.quartz.http2.routes.HttpRouteIO
 
@@ -211,13 +212,13 @@ class QuartzH2Server(  HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SS
     (hdrs, cur)
   }
 
-  def doConnect(
+  def doConnect[Env](
       ch: IOChannel,
       maxStreams: Int,
       keepAliveMs: Int,
-      route: Request => Task[Option[Response]],
+      route: HttpRoute[Env],
       leftOver: Chunk[Byte] = Chunk.empty[Byte]
-  ): Task[Unit] = {
+  ): ZIO[Env, Throwable, Unit] = {
     for {
       buf <-
         if (leftOver.size > 0) ZIO.succeed(leftOver) else ch.read(HTTP1_KEEP_ALIVE_MS)
@@ -243,13 +244,13 @@ class QuartzH2Server(  HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SS
 
   }
 
-  def doConnectUpgrade(
+  def doConnectUpgrade[Env](
       ch: IOChannel,
       maxStreams: Int,
       keepAliveMs: Int,
-      route: Request => Task[Option[Response]],
+      route: HttpRoute[Env],
       buf: Chunk[Byte]
-  ): Task[Unit] = {
+  ): ZIO[Env, Throwable, Unit] = {
     val R = for {
       _ <- ZIO.logTrace("doConnectUpgrade()")
       hb <- ZIO.attempt(getHttpHeaderAndLeftover(buf))
@@ -315,11 +316,11 @@ class QuartzH2Server(  HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SS
     ia.getHostString()
   }
 
-  def startIO( pf: HttpRouteIO, filter : HttpRoute = (r0: Request) => ZIO.succeed( None ), sync: Boolean): Task[ExitCode] = {
-    start(Routes.of(pf, filter), sync)
+  def startIO[Env]( pf: HttpRouteIO[Env], filter : WebFilter = (r0: Request) => ZIO.succeed( None ), sync: Boolean): ZIO[Env, Throwable, ExitCode] = {
+    start[Env](Routes.of[Env](pf, filter), sync)
   }
 
-  def start(R: HttpRoute, sync: Boolean): Task[ExitCode] = {
+  def start[Env](R: HttpRoute[Env], sync: Boolean): ZIO[Env, Throwable, ExitCode] = {
 
     val cores = Runtime.getRuntime().availableProcessors()
     val h2streams = cores * 2 // optimal setting tested with h2load
@@ -353,7 +354,7 @@ class QuartzH2Server(  HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SS
     }
   }
 
-  def run0(e: ExecutorService, R: HttpRoute, maxThreadNum: Int, maxStreams: Int, keepAliveMs: Int): Task[ExitCode] = {
+  def run0[Env](e: ExecutorService, R: HttpRoute[Env], maxThreadNum: Int, maxStreams: Int, keepAliveMs: Int) : ZIO[Env, Throwable, ExitCode]= {
     for {
       addr <- ZIO.attempt(new InetSocketAddress(HOST, PORT))
       _ <- ZIO.logInfo("HTTP/2 TLS Service: QuartzH2 (async - Java NIO)")
@@ -396,7 +397,7 @@ class QuartzH2Server(  HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SS
     } yield (ExitCode.success)
   }
 
-  def run1(R: HttpRoute, maxThreadNum: Int, maxStreams: Int, keepAliveMs: Int): Task[ExitCode] = {
+  def run1[Env](R: HttpRoute[Env], maxThreadNum: Int, maxStreams: Int, keepAliveMs: Int): ZIO[Env, Throwable, ExitCode] = {
     for {
       addr <- ZIO.succeed(new InetSocketAddress(HOST, PORT))
 

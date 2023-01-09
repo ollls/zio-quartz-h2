@@ -26,6 +26,7 @@ import scala.concurrent.ExecutionContext
 
 import zio.{ZIO, Task, Promise, Queue, Chunk, Ref, Semaphore}
 import zio.stream.{ZStream, ZChannel, ZPipeline}
+import io.quartz.http2.routes.HttpRoute
 
 object Http2Connection {
 
@@ -45,13 +46,13 @@ object Http2Connection {
     } yield (res)
   }
 
-  def make(
+  def make[Env](
       ch: IOChannel,
       maxStreams: Int,
       keepAliveMs: Int,
-      httpRoute: Request => Task[Option[Response]],
+      httpRoute: HttpRoute[Env],
       http11request: Option[Request]
-  ): Task[Http2Connection] = {
+  ): Task[Http2Connection[Env]] = {
     for {
       _ <- ZIO.logDebug("Http2Connection.make()")
       shutdownPromise <- Promise.make[Throwable, Boolean]
@@ -112,7 +113,7 @@ object Http2Connection {
     (len, frameType, flags, streamId)
   }
 
-  private[this] def dataEvalEffectProducer(c: Http2Connection, q: Queue[ByteBuffer]): Task[ByteBuffer] = {
+  private[this] def dataEvalEffectProducer[Env](c: Http2Connection[Env], q: Queue[ByteBuffer]): Task[ByteBuffer] = {
     for {
       bb <- q.take
       tp <- ZIO.attempt(parseFrame(bb))
@@ -140,7 +141,7 @@ object Http2Connection {
     } yield (bb)
   }
 
-  private[this] def makeDataStream(c: Http2Connection, q: Queue[ByteBuffer]): ZStream[Any, Throwable, Byte] = {
+  private[this] def makeDataStream[Env](c: Http2Connection[Env], q: Queue[ByteBuffer]): ZStream[Any, Throwable, Byte] = {
     val dataStream0 = ZStream.repeatZIO(dataEvalEffectProducer(c, q)).takeUntil{ buffer =>
       val len = Frames.getLengthField(buffer)
       val frameType = buffer.get()
@@ -305,9 +306,9 @@ case class Http2Stream(
 
 }
 
-class Http2Connection(
+class Http2Connection[Env](
     ch: IOChannel,
-    httpRoute: Request => Task[Option[Response]],
+    httpRoute: HttpRoute[Env],
     httpReq11: Ref[Option[Request]],
     outq: Queue[ByteBuffer],
     outDataQEventQ: Queue[Boolean],
@@ -517,7 +518,7 @@ class Http2Connection(
     }
   }
 
-  private[this] def openStream11(streamId: Int, request: Request): Task[Unit] = {
+  private[this] def openStream11(streamId: Int, request: Request): ZIO[Env, Throwable,Unit] = {
     for {
       nS <- ZIO.attempt(concurrentStreams.get)
       _ <- ZIO.logInfo(s"Open upgraded http/1.1 stream: $streamId  total = ${streamTbl.size} active = ${nS}")
@@ -570,7 +571,7 @@ class Http2Connection(
 
   }
 
-  private[this] def openStream(streamId: Int, flags: Int) =
+  private[this] def openStream(streamId: Int, flags: Int) : ZIO[Env, Throwable, Unit]=
     for {
 
       // usedId <- usedStreamIdCounter.get
@@ -671,7 +672,7 @@ class Http2Connection(
     } yield (trailing)
   }
 
-  private[this] def doStreamHeaders(streamId: Int, flags: Int): Task[Boolean] = {
+  private[this] def doStreamHeaders(streamId: Int, flags: Int): ZIO[Env, Throwable, Boolean] = {
     for {
       trailing <- checkForTrailingHeaders(streamId, flags)
       _ <- openStream(streamId, flags).when(trailing == false)
@@ -929,7 +930,7 @@ class Http2Connection(
 
   ////////////////////////////////////////////
 
-  def route2(streamId: Int, request: Request): Task[Unit] = {
+  def route2(streamId: Int, request: Request): ZIO[Env, Throwable, Unit] = {
 
     val T = for {
       _ <- ZIO.logDebug(s"Processing request for stream = $streamId ${request.method.name} ${request.path} ")
@@ -1138,7 +1139,7 @@ class Http2Connection(
     }
   }
 
-  def processIncoming(leftOver: Chunk[Byte]): Task[Unit] = {
+  def processIncoming(leftOver: Chunk[Byte]): ZIO[Env, Throwable, Unit] = {
     ZIO.logTrace(s"Http2Connection.processIncoming() leftOver= ${leftOver.size}") *>
       Http2Connection
         .makePacketStream(ch, HTTP2_KEEP_ALIVE_MS, leftOver)
@@ -1158,7 +1159,7 @@ class Http2Connection(
   def packet_handler(
       http11request: Ref[Option[Request]],
       packet: Chunk[Byte]
-  ): Task[Unit] = {
+  ): ZIO[Env, Throwable, Unit] = {
 
     val buffer = ByteBuffer.wrap(packet.toArray)
     val packet0 = buffer.slice // preserve reference to whole packet

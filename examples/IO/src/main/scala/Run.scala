@@ -1,6 +1,6 @@
 package example
 
-import zio.{ZIO, Task, Chunk, Promise, ExitCode, ZIOApp}
+import zio.{ZIO, Task, Chunk, Promise, ExitCode, ZIOApp, ZLayer}
 import zio.ZIOAppDefault
 import zio.stream.{ZStream, ZPipeline, ZSink}
 import io.quartz.QuartzH2Server
@@ -29,7 +29,12 @@ object MyApp extends ZIOAppDefault {
 
   // val HOME_DIR = "/Users/user000/tmp1/"
 
-  val R: HttpRouteIO = {
+  val R: HttpRouteIO[String] = {
+
+    case GET -> Root / "envstr" =>
+      for {
+        text <- ZIO.environmentWith[String]( str => str.get )
+      } yield (Response.Ok().asText( s"$text"))
 
     case req @ POST -> Root / "mpart" =>
       MultiPart.writeAll(req, "/Users/user000/tmp1/") *> ZIO.succeed(Response.Ok())
@@ -74,10 +79,11 @@ object MyApp extends ZIOAppDefault {
   }
 
   def run =
-    for {
+    val env = ZLayer.fromZIO( ZIO.succeed( "Hello ZIO World!") )
+    (for {
       ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
       exitCode <- new QuartzH2Server("localhost", 8443, 16000, ctx).startIO(R, filter, sync = false)
 
-    } yield (exitCode)
+    } yield (exitCode)).provideSomeLayer( env )
 
 }
