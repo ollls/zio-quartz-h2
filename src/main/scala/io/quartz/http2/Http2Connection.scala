@@ -959,6 +959,8 @@ class Http2Connection[Env](
       response_o <- (httpRoute(request)).catchAll {
         case e: java.io.FileNotFoundException =>
           ZIO.logError(e.toString) *> ZIO.succeed(None)
+        case e: java.nio.file.NoSuchFileException => 
+          ZIO.logError(e.toString) *> ZIO.succeed(None)
         case e =>
           ZIO.logError(e.toString) *>
             ZIO.succeed(Some(Response.Error(StatusCode.InternalServerError)))
