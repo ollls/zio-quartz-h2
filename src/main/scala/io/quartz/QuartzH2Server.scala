@@ -343,7 +343,11 @@ class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLC
       // val e = new java.util.concurrent.ForkJoinPool(cores) //.ForkJoinPool(cores, fjj, (t, e) => System.exit(0), false)
       // val e0 = Executors.newFixedThreadPool(cores);
       // val ec = ExecutionContext.fromExecutor(e)
-      ZIO.executor.map(_.asExecutionContextExecutorService).flatMap(run0(_, R, cores, h2streams, h2IdleTimeOutMs))
+
+      if (sslCtx != null)
+        ZIO.executor.map(_.asExecutionContextExecutorService).flatMap(run0(_, R, cores, h2streams, h2IdleTimeOutMs))
+      else
+        ZIO.executor.map(_.asExecutionContextExecutorService).flatMap(run3(_, R, cores, h2streams, h2IdleTimeOutMs))
       // val ee = zio.Executor.fromJavaExecutor( e )
       // ZIO.onExecutor( ee )( run0( e, R, cores, h2streams, h2IdleTimeOutMs))
 
@@ -390,13 +394,13 @@ class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLC
           )
         )
         .flatMap(ch => ZIO.attempt(TLSChannel(sslCtx, ch)))
-        
+
       ch0 <- accept
         .flatMap((c => c.ssl_init_h2().map((c, _)).catchAll(e => c.close().ignore *> ZIO.fail(e))))
         .flatMap(ch1 =>
           ZIO.scoped {
             ZIO
-              .acquireRelease(ZIO.succeed(ch1))(t => t._1.close().ignore) // handleError!!!!
+              .acquireRelease(ZIO.succeed(ch1))(t => t._1.close().ignore)
               .flatMap(t => doConnect(t._1, maxStreams, keepAliveMs, R, t._2).catchAll(e => errorHandler(e).ignore))
           }.fork
         )
@@ -443,11 +447,60 @@ class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLC
           ZIO.scoped {
             ZIO
               .acquireRelease(ZIO.succeed(ch1))(_.close().ignore)
-              .flatMap(ch => doConnect(ch, maxStreams, keepAliveMs, R, Chunk.empty[Byte])).catchAll(e => errorHandler(e).ignore)
+              .flatMap(ch => doConnect(ch, maxStreams, keepAliveMs, R, Chunk.empty[Byte]))
+              .catchAll(e => errorHandler(e).ignore)
           }.fork
         )
         .catchAll(e => errorHandler(e).ignore)
         .forever
+    } yield (ExitCode.success)
+  }
+
+  def run3[Env](
+      e: ExecutorService,
+      R: HttpRoute[Env],
+      maxThreadNum: Int,
+      maxStreams: Int,
+      keepAliveMs: Int
+  ): ZIO[Env, Throwable, ExitCode] = {
+    for {
+      addr <- ZIO.attempt(new InetSocketAddress(HOST, PORT))
+      _ <- ZIO.logInfo("HTTP/2 h2c: QuartzH2 (async - Java NIO)")
+      _ <- ZIO.logInfo(s"Concurrency level(max threads): $maxThreadNum, max streams per conection: $maxStreams")
+      _ <- ZIO.logInfo(s"h2c idle timeout: $keepAliveMs Ms")
+      _ <- ZIO.logInfo(
+        s"Listens: ${addr.getHostString()}:${addr.getPort().toString()}"
+      )
+      group <- ZIO.attempt(
+        AsynchronousChannelGroup.withThreadPool(e)
+      )
+      server_ch <- ZIO.attempt(
+        group.provider().openAsynchronousServerSocketChannel(group).bind(addr)
+      )
+
+      _ <- ctrlC_handlerZIO(group, server_ch)
+
+      accept = ZIO.logDebug("Wait on accept") *> TCPChannel
+        .accept(server_ch)
+        .tap(c =>
+          ZIO.logInfo(
+            s"Connect from remote peer: ${hostName(c.ch.getRemoteAddress())}"
+          )
+        )
+
+      ch0 <- accept
+        .flatMap(ch1 =>
+          ZIO.scoped {
+            ZIO
+              .acquireRelease(ZIO.succeed(ch1))(t => t.close().ignore)
+              .flatMap(t =>
+                doConnect(t, maxStreams, keepAliveMs, R, Chunk.empty[Byte]).catchAll(e => errorHandler(e).ignore)
+              )
+          }.fork
+        )
+        .catchAll(e => errorHandler(e).ignore)
+        .forever
+
     } yield (ExitCode.success)
   }
 
