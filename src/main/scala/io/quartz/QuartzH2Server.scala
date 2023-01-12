@@ -87,7 +87,7 @@ object QuartzH2Server {
   }
 }
 
-class QuartzH2Server(  HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLContext) {
+class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLContext) {
 
   // def this(HOST: String) = this(HOST, 8080, 20000, null)
 
@@ -316,7 +316,11 @@ class QuartzH2Server(  HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SS
     ia.getHostString()
   }
 
-  def startIO[Env]( pf: HttpRouteIO[Env], filter : WebFilter = (r0: Request) => ZIO.succeed( None ), sync: Boolean): ZIO[Env, Throwable, ExitCode] = {
+  def startIO[Env](
+      pf: HttpRouteIO[Env],
+      filter: WebFilter = (r0: Request) => ZIO.succeed(None),
+      sync: Boolean
+  ): ZIO[Env, Throwable, ExitCode] = {
     start[Env](Routes.of[Env](pf, filter), sync)
   }
 
@@ -354,7 +358,13 @@ class QuartzH2Server(  HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SS
     }
   }
 
-  def run0[Env](e: ExecutorService, R: HttpRoute[Env], maxThreadNum: Int, maxStreams: Int, keepAliveMs: Int) : ZIO[Env, Throwable, ExitCode]= {
+  def run0[Env](
+      e: ExecutorService,
+      R: HttpRoute[Env],
+      maxThreadNum: Int,
+      maxStreams: Int,
+      keepAliveMs: Int
+  ): ZIO[Env, Throwable, ExitCode] = {
     for {
       addr <- ZIO.attempt(new InetSocketAddress(HOST, PORT))
       _ <- ZIO.logInfo("HTTP/2 TLS Service: QuartzH2 (async - Java NIO)")
@@ -380,24 +390,28 @@ class QuartzH2Server(  HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SS
           )
         )
         .flatMap(ch => ZIO.attempt(TLSChannel(sslCtx, ch)))
-        .flatMap(c => c.ssl_init_h2().map((c, _)))
-
+        
       ch0 <- accept
+        .flatMap((c => c.ssl_init_h2().map((c, _)).catchAll(e => c.close().ignore *> ZIO.fail(e))))
         .flatMap(ch1 =>
           ZIO.scoped {
             ZIO
-              .acquireRelease(ZIO.succeed(ch1))(t =>
-                t._1.close().catchAll(e => errorHandler(e).ignore)
-              ) // handleError!!!!
-              .flatMap(t => doConnect(t._1, maxStreams, keepAliveMs, R, t._2))
+              .acquireRelease(ZIO.succeed(ch1))(t => t._1.close().ignore) // handleError!!!!
+              .flatMap(t => doConnect(t._1, maxStreams, keepAliveMs, R, t._2).catchAll(e => errorHandler(e).ignore))
           }.fork
-        ).catchAll(e => errorHandler(e).ignore)
+        )
+        .catchAll(e => errorHandler(e).ignore)
         .forever
 
     } yield (ExitCode.success)
   }
 
-  def run1[Env](R: HttpRoute[Env], maxThreadNum: Int, maxStreams: Int, keepAliveMs: Int): ZIO[Env, Throwable, ExitCode] = {
+  def run1[Env](
+      R: HttpRoute[Env],
+      maxThreadNum: Int,
+      maxStreams: Int,
+      keepAliveMs: Int
+  ): ZIO[Env, Throwable, ExitCode] = {
     for {
       addr <- ZIO.succeed(new InetSocketAddress(HOST, PORT))
 
@@ -428,10 +442,11 @@ class QuartzH2Server(  HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SS
         .flatMap(ch1 =>
           ZIO.scoped {
             ZIO
-              .acquireRelease(ZIO.succeed(ch1))(_.close().catchAll(e => errorHandler(e).ignore)) // handleError!!!!
-              .flatMap(ch => doConnect(ch, maxStreams, keepAliveMs, R, Chunk.empty[Byte]))
+              .acquireRelease(ZIO.succeed(ch1))(_.close().ignore)
+              .flatMap(ch => doConnect(ch, maxStreams, keepAliveMs, R, Chunk.empty[Byte])).catchAll(e => errorHandler(e).ignore)
           }.fork
-        ).catchAll(e => errorHandler(e).ignore)
+        )
+        .catchAll(e => errorHandler(e).ignore)
         .forever
     } yield (ExitCode.success)
   }
