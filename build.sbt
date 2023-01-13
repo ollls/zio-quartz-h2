@@ -18,6 +18,12 @@ ThisBuild / developers := List(
 ThisBuild / licenses := List("Apache 2" -> new URL("http://www.apache.org/licenses/LICENSE-2.0.txt"))
 ThisBuild / homepage := Some(url("https://github.com/ollls/zio-quartz-h2"))
 ThisBuild / credentials += Credentials(Path.userHome / ".sbt" / ".credentials")
+ThisBuild / credentials += Credentials(
+  "GnuPG Key ID",
+  "gpg",
+  "F85809244447DB9FA35A3C9B1EB44A5FC60F4104", // key identifier
+  "ignored" // this field is ignored; passwords are supplied by pinentry
+)
 
 ThisBuild / pomIncludeRepository := { _ => false }
 ThisBuild / publishTo := {
@@ -35,7 +41,6 @@ ThisBuild / scmInfo := Some(
 )
 
 Runtime / unmanagedClasspath += baseDirectory.value / "src" / "main" / "resources"
-
 
 lazy val root = (project in file("."))
   .settings(
