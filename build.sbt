@@ -4,6 +4,7 @@ ThisBuild / scalaVersion := "3.2.1"
 ThisBuild / version := "0.2.0"
 ThisBuild / organization := "io.github.ollls"
 ThisBuild / organizationName := "ollls"
+ThisBuild / versionScheme := Some("strict") //or Some("pvp")`
 
 ThisBuild / developers := List(
   Developer(
@@ -16,6 +17,7 @@ ThisBuild / developers := List(
 
 ThisBuild / licenses := List("Apache 2" -> new URL("http://www.apache.org/licenses/LICENSE-2.0.txt"))
 ThisBuild / homepage := Some(url("https://github.com/ollls/zio-quartz-h2"))
+ThisBuild / credentials += Credentials(Path.userHome / ".sbt" / ".credentials")
 
 ThisBuild / pomIncludeRepository := { _ => false }
 ThisBuild / publishTo := {
@@ -33,6 +35,7 @@ ThisBuild / scmInfo := Some(
 )
 
 Runtime / unmanagedClasspath += baseDirectory.value / "src" / "main" / "resources"
+
 
 lazy val root = (project in file("."))
   .settings(
