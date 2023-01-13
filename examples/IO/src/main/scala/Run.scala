@@ -33,6 +33,9 @@ object MyApp extends ZIOAppDefault {
 
   val R: HttpRouteIO[String] = 
 
+    case req @ GET -> "pub" /: remainig_path =>
+      ZIO.succeed(Response.Ok().asText(remainig_path.toString() ) )
+
     //GET with two parameters
     case req @ GET -> Root / "hello" / "1" / "2" / "user2" :? param1(test) :? param2(test2) =>
             ZIO.succeed(Response.Ok().asText("param1=" + test + "  " + "param2=" + test2))
