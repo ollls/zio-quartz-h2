@@ -8,6 +8,7 @@ import io.quartz.http2._
 import io.quartz.http2.model.{Headers, Method, ContentType, Request, Response}
 import io.quartz.http2.model.Method._
 import io.quartz.http2.routes.Routes
+import io.quartz.http2.model.Cookie
 import io.quartz.http2.routes.HttpRouteIO
 import io.quartz.http2.routes.WebFilter
 
@@ -18,6 +19,9 @@ import zio.LogLevel
 import io.quartz.util.MultiPart
 import io.quartz.http2.model.StatusCode
 
+object param1 extends QueryParam("param1")
+object param2 extends QueryParam("param2")
+
 object MyApp extends ZIOAppDefault {
 
   override val bootstrap = zio.Runtime.removeDefaultLoggers ++ SLF4J.slf4j
@@ -27,15 +31,36 @@ object MyApp extends ZIOAppDefault {
       .succeed(Response.Error(StatusCode.Forbidden).asText("Denied: " + r.uri.getPath()))
       .when(r.uri.getPath().endsWith("test70.jpeg"))
 
-  // val HOME_DIR = "/Users/user000/tmp1/"
+  val R: HttpRouteIO[String] = 
 
-  val R: HttpRouteIO[String] = {
+    //GET with two parameters
+    case req @ GET -> Root / "hello" / "1" / "2" / "user2" :? param1(test) :? param2(test2) =>
+            ZIO.succeed(Response.Ok().asText("param1=" + test + "  " + "param2=" + test2))
 
+    //GET with paameter, cookies and custom headers        
+    case GET -> Root / "hello" / "user" / StringVar(userId) :? param1(par) =>
+      val headers = Headers( "procid" -> "header_value_from_server", "content-type" -> ContentType.Plain.toString)
+      val c1 = Cookie("testCookie1", "ABCD", secure = true)
+      val c2 = Cookie("testCookie2", "ABCDEFG", secure = false)
+      val c3 =
+        Cookie("testCookie3", "1A8BD0FC645E0", secure = false, expires = Some(java.time.ZonedDateTime.now.plusHours(5)))
+
+      ZIO.succeed(
+        Response
+          .Ok().hdr(headers)
+          .cookie(c1)
+          .cookie(c2)
+          .cookie(c3)
+          .asText(s"$userId with para1 $par")
+      )
+
+    //GET with simple ZIO environment made as just a String  
     case GET -> Root / "envstr" =>
       for {
-        text <- ZIO.environmentWith[String]( str => str.get )
-      } yield (Response.Ok().asText( s"$text"))
+        text <- ZIO.environmentWith[String](str => str.get)
+      } yield (Response.Ok().asText(s"$text"))
 
+    //automatic multi-part upload, file names preserved  
     case req @ POST -> Root / "mpart" =>
       MultiPart.writeAll(req, "/Users/user000/tmp1/") *> ZIO.succeed(Response.Ok())
 
@@ -70,20 +95,20 @@ object MyApp extends ZIOAppDefault {
       for {
         jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
         present <- ZIO.attempt(jpath.exists())
-        _ <- ZIO.fail(new java.io.FileNotFoundException( jpath.toString())).when(present == false)
+        _ <- ZIO.fail(new java.io.FileNotFoundException(jpath.toString())).when(present == false)
       } yield (Response
         .Ok()
         .asStream(ZStream.fromFile(jpath, BLOCK_SIZE))
         .contentType(ContentType.contentTypeFromFileName(FILE)))
 
-  }
+  
 
   def run =
-    val env = ZLayer.fromZIO( ZIO.succeed( "Hello ZIO World!") )
+    val env = ZLayer.fromZIO(ZIO.succeed("Hello ZIO World!"))
     (for {
       ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
       exitCode <- new QuartzH2Server("localhost", 8443, 16000, ctx).startIO(R, filter, sync = false)
 
-    } yield (exitCode)).provideSomeLayer( env )
+    } yield (exitCode)).provideSomeLayer(env)
 
 }
