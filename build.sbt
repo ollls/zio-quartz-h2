@@ -4,7 +4,7 @@ ThisBuild / scalaVersion := "3.2.1"
 ThisBuild / version := "0.2.0"
 ThisBuild / organization := "io.github.ollls"
 ThisBuild / organizationName := "ollls"
-ThisBuild / versionScheme := Some("strict") //or Some("pvp")`
+ThisBuild / versionScheme := Some("strict")
 
 ThisBuild / developers := List(
   Developer(

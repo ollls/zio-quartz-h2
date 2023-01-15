@@ -141,8 +141,11 @@ object Http2Connection {
     } yield (bb)
   }
 
-  private[this] def makeDataStream[Env](c: Http2Connection[Env], q: Queue[ByteBuffer]): ZStream[Any, Throwable, Byte] = {
-    val dataStream0 = ZStream.repeatZIO(dataEvalEffectProducer(c, q)).takeUntil{ buffer =>
+  private[this] def makeDataStream[Env](
+      c: Http2Connection[Env],
+      q: Queue[ByteBuffer]
+  ): ZStream[Any, Throwable, Byte] = {
+    val dataStream0 = ZStream.repeatZIO(dataEvalEffectProducer(c, q)).takeUntil { buffer =>
       val len = Frames.getLengthField(buffer)
       val frameType = buffer.get()
       val flags = buffer.get()
@@ -155,35 +158,8 @@ object Http2Connection {
       val continue: Boolean = ((flags & Flags.END_STREAM) == 0)
       !continue
     }
-
-    //val c = Chunk.fromByteBuffer(b)
-
-   // dataStream0.flatMap(b => { ZStream((ByteBuffer.allocate(b.remaining).put(b).array())) } )  
-
-    dataStream0.flatMap(b => ZStream.fromChunk( Chunk.fromByteBuffer(b) ) )
+    dataStream0.flatMap(b => ZStream.fromChunk(Chunk.fromByteBuffer(b)))
   }
-
-  // private[this] def makeDataStream2(c: Http2Connection, q: Queue[ByteBuffer]): ZStream[Any, Throwable, Byte] = {
-  /*
-    val dataStream0 = Stream.eval(dataEvalEffectProducer(c, q)).repeat.takeThrough { buffer =>
-      val len = Frames.getLengthField(buffer)
-      val frameType = buffer.get()
-      val flags = buffer.get()
-      val _ = Frames.getStreamId(buffer)
-
-      val padLen: Byte = if ((flags & Flags.PADDED) != 0) buffer.get() else 0 // advance one byte padding len 1
-
-      val lim = buffer.limit() - padLen
-      buffer.limit(lim)
-      val continue: Boolean = ((flags & Flags.END_STREAM) == 0)
-      continue // true if flags has no end stream
-    }
-
-    dataStream0.flatMap(b => Stream.emits(ByteBuffer.allocate(b.remaining).put(b).array()))
-   */
-//    null
-
-  // }
 
   def packetStreamPipe: ZPipeline[Any, Exception, Byte, Chunk[Byte]] = {
     def go2(carryOver: Chunk[Byte]): ZChannel[Any, Exception, Chunk[Byte], Any, Exception, Chunk[Chunk[Byte]], Any] = {
@@ -518,7 +494,7 @@ class Http2Connection[Env](
     }
   }
 
-  private[this] def openStream11(streamId: Int, request: Request): ZIO[Env, Throwable,Unit] = {
+  private[this] def openStream11(streamId: Int, request: Request): ZIO[Env, Throwable, Unit] = {
     for {
       nS <- ZIO.attempt(concurrentStreams.get)
       _ <- ZIO.logInfo(s"Open upgraded http/1.1 stream: $streamId  total = ${streamTbl.size} active = ${nS}")
@@ -571,7 +547,7 @@ class Http2Connection[Env](
 
   }
 
-  private[this] def openStream(streamId: Int, flags: Int) : ZIO[Env, Throwable, Unit]=
+  private[this] def openStream(streamId: Int, flags: Int): ZIO[Env, Throwable, Unit] =
     for {
 
       // usedId <- usedStreamIdCounter.get
@@ -635,9 +611,9 @@ class Http2Connection[Env](
         r <- ZIO.attempt(
           Request(
             h,
-            if ((flags & Flags.END_STREAM) == Flags.END_STREAM)
+            if ((flags & Flags.END_STREAM) == Flags.END_STREAM) {
               ZStream.empty
-            else Http2Connection.makeDataStream(this, dataIn),
+            } else Http2Connection.makeDataStream(this, dataIn),
             trailingHdr
           )
         )
@@ -758,7 +734,7 @@ class Http2Connection[Env](
         else
           processInboundGlobalFlowControl(streamId, dataSize) *>
             this.globalInboundWindow.update(_ - dataSize) *>
-            this.incrementGlobalPendingInboundData(dataSize)   
+            this.incrementGlobalPendingInboundData(dataSize)
       _ <- c.inDataQ.offer(bb)
 
     } yield ()
@@ -959,7 +935,7 @@ class Http2Connection[Env](
       response_o <- (httpRoute(request)).catchAll {
         case e: java.io.FileNotFoundException =>
           ZIO.logError(e.toString) *> ZIO.succeed(None)
-        case e: java.nio.file.NoSuchFileException => 
+        case e: java.nio.file.NoSuchFileException =>
           ZIO.logError(e.toString) *> ZIO.succeed(None)
         case e =>
           ZIO.logError(e.toString) *>
@@ -970,7 +946,7 @@ class Http2Connection[Env](
         case Some(response) =>
           for {
             _ <- ZIO.logTrace("response.headers: " + response.headers.printHeaders(" | "))
-            endStreamInHeaders <- if (response.stream == ZStream.empty) ZIO.succeed(true) else ZIO.succeed(false)
+            endStreamInHeaders <- if (response.stream == Response.EmptyStream) ZIO.succeed(true) else ZIO.succeed(false)
             _ <- ZIO.logDebug(
               s"Send response code: ${response.code.toString()} only header = $endStreamInHeaders"
             )
@@ -988,23 +964,25 @@ class Http2Connection[Env](
 
             pref <- Ref.make[Chunk[Byte]](Chunk.empty[Byte])
 
-            _ <- response.stream.chunks
-              .foreach { chunk =>
-                for {
-                  chunk0 <- pref.get
-                  _ <- ZIO
-                    .foreach(dataFrame(streamId, false, ByteBuffer.wrap(chunk0.toArray)))(b =>
-                      sendDataFrame(streamId, b)
-                    )
-                    .when(chunk0.nonEmpty)
-                  _ <- pref.set(chunk)
-                } yield ()
-              }
-              .when(endStreamInHeaders == false)
+            _ <-
+              if (endStreamInHeaders == false)
+                response.stream.chunks
+                  .foreach { chunk =>
+                    for {
+                      chunk0 <- pref.get
+                      _ <- ZIO
+                        .foreach(dataFrame(streamId, false, ByteBuffer.wrap(chunk0.toArray)))(b =>
+                          sendDataFrame(streamId, b)
+                        )
+                        .when(chunk0.nonEmpty)
+                      _ <- pref.set(chunk)
+                    } yield ()
+                  }
+              else ZIO.unit
 
             lastChunk <- pref.get
-            _ <- ZIO
-              .foreach(dataFrame(streamId, true, ByteBuffer.wrap(lastChunk.toArray)))(b => sendDataFrame(streamId, b))
+            _ <- (ZIO
+              .foreach(dataFrame(streamId, true, ByteBuffer.wrap(lastChunk.toArray)))(b => sendDataFrame(streamId, b)))
               .when(endStreamInHeaders == false)
               .unit
 

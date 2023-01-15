@@ -24,7 +24,7 @@ object param2 extends QueryParam("param2")
 
 object MyApp extends ZIOAppDefault {
 
-  override val bootstrap = zio.Runtime.removeDefaultLoggers ++ SLF4J.slf4j
+  override val bootstrap = zio.Runtime.removeDefaultLoggers ++ SLF4J.slf4j ++ zio.Runtime.enableWorkStealing
 
   val filter: WebFilter = (r: Request) =>
     ZIO
@@ -110,7 +110,7 @@ object MyApp extends ZIOAppDefault {
     val env = ZLayer.fromZIO(ZIO.succeed("Hello ZIO World!"))
     (for {
       ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
-      exitCode <- new QuartzH2Server("localhost", 8443, 16000, ctx).startIO(R, filter, sync = false)
+      exitCode <- new QuartzH2Server("localhost", 8444, 16000, ctx).startIO(R, filter, sync = false)
 
     } yield (exitCode)).provideSomeLayer(env)
 

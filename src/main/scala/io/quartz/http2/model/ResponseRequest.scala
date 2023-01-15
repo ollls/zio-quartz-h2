@@ -23,6 +23,8 @@ sealed case class Request(headers: Headers, stream: ZStream[Any, Throwable ,Byte
 
 object Response {
 
+  val EmptyStream = ZStream.empty
+
   def Ok(): Response = { 
      val h = Headers() + ( ":status", StatusCode.OK.toString )    
      new Response(StatusCode.OK, h )
@@ -40,7 +42,7 @@ object Response {
 sealed case class Response(
   code: StatusCode,
   headers: Headers,
-  stream: ZStream[Any, Throwable, Byte] = ZStream.empty
+  stream: ZStream[Any, Throwable, Byte] = EmptyStream
 ) {
 
   def hdr(hdr: Headers): Response = new Response(this.code, this.headers ++ hdr, this.stream)
