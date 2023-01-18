@@ -2,7 +2,6 @@
 
 ``` 
 libraryDependencies += "io.github.ollls" %% "zio-quartz-h2" % "0.2.1"
-
 ```
 
 
