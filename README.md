@@ -4,6 +4,8 @@
 libraryDependencies += "io.github.ollls" %% "zio-quartz-h2" % "0.2.1"
 ```
 
+template project with use cases:
+https://github.com/ollls/zio-qh2-examples
 
 ZIO2 native, 100% asyncronous Java NIO based implementation of http/2 packet streaming server with TLS encryption implemented as scala ZIO2 effect. Direct native translation of ZIO ZStream chunks into http2 packets (inbound and outbound).
 
