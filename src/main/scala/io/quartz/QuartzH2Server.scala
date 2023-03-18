@@ -296,7 +296,7 @@ class QuartzH2Server(
 
       emptyTH <- Promise.make[Throwable, Headers] // no trailing headers for 1.1
       _ <- emptyTH.succeed(Headers()) // complete with empty
-      http11request <- ZIO.attempt(Some(Request(headers11, res, emptyTH)))
+      http11request <- ZIO.attempt(Some(Request(id, 1, headers11, res, emptyTH)))
       upd = headers11.get("upgrade").getOrElse("")
       _ <- ZIO.logTrace("doConnectUpgrade() - Upgrade = " + upd)
       clientPreface <-

@@ -588,6 +588,8 @@ class Http2Connection[Env](
         _ <- interceptContentLen(c, h)
         r <- ZIO.attempt(
           Request(
+            id,
+            streamId,
             h,
             if ((flags & Flags.END_STREAM) == Flags.END_STREAM) {
               ZStream.empty
@@ -1444,7 +1446,7 @@ class Http2Connection[Env](
                         val stream = x.stream
                         val th = x.trailingHeaders
                         val h = x.headers.drop("connection")
-                        this.openStream11(1, Request(h, stream, th)) // Request(id, 1, h, stream, th))
+                        this.openStream11(1, Request(id,1, h, stream, th))
                       }
                       case None => ZIO.unit
                     }).when(start)
