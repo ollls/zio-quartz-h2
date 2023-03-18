@@ -1,6 +1,6 @@
 package io.quartz
 
-import zio.{ZIO, Task, Chunk, Promise, ExitCode, ZIOApp}
+import zio.{ZIO, UIO, Task, Chunk, Promise, Ref, ExitCode, ZIOApp}
 import zio.stream.ZStream
 
 import io.quartz.http2.Http2Connection
@@ -87,7 +87,31 @@ object QuartzH2Server {
   }
 }
 
-class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLContext, incomingWinSize: Int = 65535) {
+/** Quartz HTTP/2 server.
+  * @param HOST
+  *   the host address of the server
+  * @param PORT
+  *   the port number to bind to
+  * @param h2IdleTimeOutMs
+  *   the maximum idle time in milliseconds before a connection is closed
+  * @param sslCtx
+  *   the SSL context to use for secure connections, can be null for non-secure connections
+  * @param incomingWinSize
+  *   the initial window size for incoming flow control
+  * @param onConnect
+  *   callback function that is called when a connection is established, provides connectionId : Long as an argument
+  * @param onDisconnect
+  *   callback function that is called when a connection is terminated, provides connectionId : Long as an argument
+  */
+class QuartzH2Server(
+    HOST: String,
+    PORT: Int,
+    h2IdleTimeOutMs: Int,
+    sslCtx: SSLContext,
+    incomingWinSize: Int = 65535,
+    onConnect: Long => Task[Unit] = _ => ZIO.unit,
+    onDisconnect: Long => UIO[Unit] = _ => ZIO.unit
+) {
 
   // def this(HOST: String) = this(HOST, 8080, 20000, null)
 
@@ -214,12 +238,14 @@ class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLC
 
   def doConnect[Env](
       ch: IOChannel,
+      idRef: Ref[Long],
       maxStreams: Int,
       keepAliveMs: Int,
       route: HttpRoute[Env],
       leftOver: Chunk[Byte] = Chunk.empty[Byte]
   ): ZIO[Env, Throwable, Unit] = {
     for {
+      id <- idRef.get
       buf <-
         if (leftOver.size > 0) ZIO.succeed(leftOver) else ch.read(HTTP1_KEEP_ALIVE_MS)
 
@@ -230,13 +256,14 @@ class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLC
       _ <- ZIO.logTrace("doConnect() - Preface result: " + isOK)
       _ <-
         if (isOK == false) {
-          doConnectUpgrade(ch, maxStreams, keepAliveMs, route, buf)
+          doConnectUpgrade(ch, id, maxStreams, keepAliveMs, route, buf)
         } else
           ZIO.scoped {
             ZIO
-              .acquireRelease(Http2Connection.make(ch, maxStreams, keepAliveMs, route, incomingWinSize, None))(
-                _.shutdown.catchAll(_ => ZIO.unit)
+              .acquireRelease(Http2Connection.make(ch, id, maxStreams, keepAliveMs, route, incomingWinSize, None))(c =>
+                onDisconnect(c.id) *> c.shutdown.catchAll(_ => ZIO.unit)
               )
+              .tap(c => onConnect(c.id))
               .flatMap(_.processIncoming(buf.drop(PrefaceString.length)))
           }
 
@@ -246,6 +273,7 @@ class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLC
 
   def doConnectUpgrade[Env](
       ch: IOChannel,
+      id: Long,
       maxStreams: Int,
       keepAliveMs: Int,
       route: HttpRoute[Env],
@@ -283,14 +311,15 @@ class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLC
       bbuf <- ZIO.attempt(ByteBuffer.wrap(clientPreface.toArray))
       isOK <- ZIO.attempt(Frames.checkPreface(bbuf))
       c <-
-        if (isOK) Http2Connection.make(ch, maxStreams, keepAliveMs, route, incomingWinSize, http11request)
+        if (isOK) Http2Connection.make(ch, id, maxStreams, keepAliveMs, route, incomingWinSize, http11request)
         else
           ZIO.fail(
             new BadProtocol(ch, "Cannot see HTTP2 Preface, bad protocol")
           )
       _ <- ZIO.scoped {
         ZIO
-          .acquireRelease(ZIO.succeed(c))(_.shutdown.catchAll(_ => ZIO.unit))
+          .acquireRelease(ZIO.succeed(c))(c => onDisconnect(c.id) *> c.shutdown.catchAll(_ => ZIO.unit))
+          .tap(c => onConnect(c.id))
           .flatMap(_.processIncoming(clientPreface.drop(PrefaceString.length)))
       }
     } yield ()
@@ -377,6 +406,9 @@ class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLC
       _ <- ZIO.logInfo(
         s"Listens: ${addr.getHostString()}:${addr.getPort().toString()}"
       )
+
+      conId <- Ref.make(0L)
+
       group <- ZIO.attempt(
         AsynchronousChannelGroup.withThreadPool(e)
       )
@@ -397,11 +429,14 @@ class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLC
 
       ch0 <- accept
         .flatMap((c => c.ssl_init_h2().map((c, _)).catchAll(e => c.close().ignore *> ZIO.fail(e))))
+        .tap(_ => conId.update(_ + 1))
         .flatMap(ch1 =>
           ZIO.scoped {
             ZIO
               .acquireRelease(ZIO.succeed(ch1))(t => t._1.close().ignore)
-              .flatMap(t => doConnect(t._1, maxStreams, keepAliveMs, R, t._2).catchAll(e => errorHandler(e).ignore))
+              .flatMap(t =>
+                doConnect(t._1, conId, maxStreams, keepAliveMs, R, t._2).catchAll(e => errorHandler(e).ignore)
+              )
           }.fork
         )
         .catchAll(e => errorHandler(e).ignore)
@@ -422,6 +457,8 @@ class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLC
       _ <- ZIO.logInfo("HTTP/2 TLS Service: QuartzH2 ( sync - Java Socket )")
       _ <- ZIO.logInfo(s"Listens: ${addr.getHostString()}:${addr.getPort().toString()}")
 
+      conId <- Ref.make(0L)
+
       server_ch: SSLServerSocket <- ZIO.attempt(
         sslCtx.getServerSocketFactory().createServerSocket(PORT, 0, addr.getAddress()).asInstanceOf[SSLServerSocket]
       )
@@ -439,6 +476,7 @@ class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLC
             })
           }
         )
+        .tap(_ => conId.update(_ + 1))
         .flatMap((c: SSLSocket) => ZIO.attempt(new SocketChannel(c)))
         .tap(c => ZIO.logInfo(s"Connect from remote peer: ${c.socket.getInetAddress().toString()}"))
 
@@ -447,7 +485,7 @@ class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLC
           ZIO.scoped {
             ZIO
               .acquireRelease(ZIO.succeed(ch1))(_.close().ignore)
-              .flatMap(ch => doConnect(ch, maxStreams, keepAliveMs, R, Chunk.empty[Byte]))
+              .flatMap(ch => doConnect(ch, conId, maxStreams, keepAliveMs, R, Chunk.empty[Byte]))
               .catchAll(e => errorHandler(e).ignore)
           }.fork
         )
@@ -471,6 +509,8 @@ class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLC
       _ <- ZIO.logInfo(
         s"Listens: ${addr.getHostString()}:${addr.getPort().toString()}"
       )
+      conId <- Ref.make(0L)
+
       group <- ZIO.attempt(
         AsynchronousChannelGroup.withThreadPool(e)
       )
@@ -489,12 +529,13 @@ class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLC
         )
 
       ch0 <- accept
+        .tap(_ => conId.update(_ + 1))
         .flatMap(ch1 =>
           ZIO.scoped {
             ZIO
               .acquireRelease(ZIO.succeed(ch1))(t => t.close().ignore)
               .flatMap(t =>
-                doConnect(t, maxStreams, keepAliveMs, R, Chunk.empty[Byte]).catchAll(e => errorHandler(e).ignore)
+                doConnect(t, conId, maxStreams, keepAliveMs, R, Chunk.empty[Byte]).catchAll(e => errorHandler(e).ignore)
               )
           }.fork
         )

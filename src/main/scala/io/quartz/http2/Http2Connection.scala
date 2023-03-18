@@ -48,6 +48,7 @@ object Http2Connection {
 
   def make[Env](
       ch: IOChannel,
+      id :Long,
       maxStreams: Int,
       keepAliveMs: Int,
       httpRoute: HttpRoute[Env],
@@ -78,6 +79,7 @@ object Http2Connection {
       c <- ZIO.attempt(
         new Http2Connection(
           ch,
+          id,
           httpRoute,
           http11Req_ref,
           outq,
@@ -222,51 +224,6 @@ object Http2Connection {
     val s = s0 ++ s1
     s.via(packetStreamPipe)
   }
-
-  /*
-  private[this] def makePacketStream2(
-      ch: IOChannel,
-      keepAliveMs: Int,
-      leftOver: Chunk[Byte]
-  ): ZStream[Any, Throwable, Chunk[Byte]] = {
-
-    val s0 = Stream.chunk[IO, Byte](leftOver)
-    val s1 =
-      Stream
-        .repeatEval(ch.read(keepAliveMs))
-        .flatMap(c0 => Stream.chunk(c0))
-
-    def go2(s: Stream[IO, Byte], chunk: Chunk[Byte]): Pull[IO, Byte, Unit] = {
-
-      val bb = chunk.toByteBuffer
-      val len = Frames.getLengthField(bb) + 3 + 1 + 1 + 4
-
-      if (chunk.size > len) {
-        Pull.output[IO, Byte](chunk.take(len)) >> go2(s, chunk.drop(len))
-      } else if (chunk.size == len) Pull.output[IO, Byte](chunk)
-      else { go(s, chunk) }
-    }
-
-    def go(s: Stream[IO, Byte], leftover: Chunk[Byte]): Pull[IO, Byte, Unit] = {
-      s.pull.uncons.flatMap {
-        case Some((hd1, tl)) =>
-          val hd = leftover ++ hd1
-          val bb = hd.toByteBuffer
-          val len = Frames.getLengthField(bb) + 3 + 1 + 1 + 4
-          (if (hd.size == len) { Pull.output[IO, Byte](hd) >> go(tl, Chunk.empty[Byte]) }
-           else if (hd.size > len) {
-             Pull.output[IO, Byte](hd.take(len)) >> go2(tl, hd.drop(len)) >> go(tl, Chunk.empty[Byte])
-           } else {
-             go(tl, hd)
-           })
-
-        case None => Pull.done
-      }
-    }
-    go(s0 ++ s1, Chunk.empty[Byte]).stream.chunks
-  }
-    null
-  }*/
 }
 
 case class Http2Stream(
@@ -293,6 +250,7 @@ case class Http2Stream(
 
 class Http2Connection[Env](
     ch: IOChannel,
+    val id : Long,
     httpRoute: HttpRoute[Env],
     httpReq11: Ref[Option[Request]],
     outq: Queue[ByteBuffer],
