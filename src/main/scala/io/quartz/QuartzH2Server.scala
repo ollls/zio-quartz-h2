@@ -87,7 +87,7 @@ object QuartzH2Server {
   }
 }
 
-class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLContext) {
+class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLContext, incomingWinSize: Int = 65535) {
 
   // def this(HOST: String) = this(HOST, 8080, 20000, null)
 
@@ -234,7 +234,7 @@ class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLC
         } else
           ZIO.scoped {
             ZIO
-              .acquireRelease(Http2Connection.make(ch, maxStreams, keepAliveMs, route, None))(
+              .acquireRelease(Http2Connection.make(ch, maxStreams, keepAliveMs, route, incomingWinSize, None))(
                 _.shutdown.catchAll(_ => ZIO.unit)
               )
               .flatMap(_.processIncoming(buf.drop(PrefaceString.length)))
@@ -283,7 +283,7 @@ class QuartzH2Server(HOST: String, PORT: Int, h2IdleTimeOutMs: Int, sslCtx: SSLC
       bbuf <- ZIO.attempt(ByteBuffer.wrap(clientPreface.toArray))
       isOK <- ZIO.attempt(Frames.checkPreface(bbuf))
       c <-
-        if (isOK) Http2Connection.make(ch, maxStreams, keepAliveMs, route, http11request)
+        if (isOK) Http2Connection.make(ch, maxStreams, keepAliveMs, route, incomingWinSize, http11request)
         else
           ZIO.fail(
             new BadProtocol(ch, "Cannot see HTTP2 Preface, bad protocol")

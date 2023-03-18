@@ -51,6 +51,7 @@ object Http2Connection {
       maxStreams: Int,
       keepAliveMs: Int,
       httpRoute: HttpRoute[Env],
+      in_winSize: Int,
       http11request: Option[Request]
   ): Task[Http2Connection[Env]] = {
     for {
@@ -87,7 +88,8 @@ object Http2Connection {
           shutdownPromise,
           hSem,
           maxStreams,
-          keepAliveMs
+          keepAliveMs,
+          in_winSize
         )
       )
       runMe = c.streamDataOutWorker
@@ -120,18 +122,25 @@ object Http2Connection {
       streamId = tp._4
       len = tp._1
 
+      o_stream <- ZIO.attempt(c.streamTbl.get(streamId))
+      _ <- ZIO.fail(ErrorGen(streamId, Error.FRAME_SIZE_ERROR, "invalid stream id")).when(o_stream.isEmpty)
+      stream <- ZIO.attempt(o_stream.get)
+
       // global counter
       _ <- c.decrementGlobalPendingInboundData(len)
       // local counter
       _ <- c.updateStreamWith(0, streamId, c => c.bytesOfPendingInboundData.update(_ - len))
+
+      localWin <- stream.inboundWindow.get
+
       WINDOW <- ZIO.succeed(c.settings.INITIAL_WINDOW_SIZE)
       pending_sz <- c.globalBytesOfPendingInboundData.get
       updWin = if (WINDOW > pending_sz) WINDOW - pending_sz else WINDOW
       _ <-
-        if (updWin > WINDOW * 0.7) {
-          ZIO.logTrace("Send WINDOW UPDATE local on processing incoming data = " + updWin) *> c.sendFrame(
-            Frames.mkWindowUpdateFrame(streamId, if (updWin > 0) updWin else WINDOW)
-          )
+        if (updWin > WINDOW * 0.7 && localWin < WINDOW * 0.3) {
+          ZIO.logDebug(s"Send WINDOW UPDATE local on processing incoming data=$updWin localWin=$localWin") *>
+            c.sendFrame(Frames.mkWindowUpdateFrame(streamId, if (updWin > 0) updWin else WINDOW)) *>
+            stream.inboundWindow.update(_ + updWin)
         } else {
           ZIO.logTrace(
             ">>>>>>>>>>>>>>>>>>>>>>>>>> still processing incoming data, pause remote, pending data = " + pending_sz
@@ -271,7 +280,7 @@ case class Http2Stream(
     transmitWindow: Ref[Long],
     syncUpdateWindowQ: Queue[Unit],
     bytesOfPendingInboundData: Ref[Int], // metric
-    inboundWindow: Ref[Int], // not used - will need a hook to userspace to configure by http route.
+    inboundWindow: Ref[Long],
     contentLenFromHeader: Promise[Throwable, Option[Int]],
     trailingHeader: Promise[Throwable, Headers],
     done: Promise[Throwable, Unit]
@@ -294,7 +303,8 @@ class Http2Connection[Env](
     shutdownD: Promise[Throwable, Boolean],
     hSem: Semaphore,
     MAX_CONCURRENT_STREAMS: Int,
-    HTTP2_KEEP_ALIVE_MS: Int
+    HTTP2_KEEP_ALIVE_MS: Int,
+    INITIAL_WINDOW_SIZE: Int
 ) {
 
   val settings: Http2Settings = new Http2Settings()
@@ -513,7 +523,13 @@ class Http2Connection[Env](
       dataIn <- Queue.unbounded[ByteBuffer]
       transmitWindow <- Ref.make[Long](settings_client.INITIAL_WINDOW_SIZE)
 
-      localInboundWindowSize <- Ref.make(-1)
+      localInboundWindowSize <- Ref.make[Long](INITIAL_WINDOW_SIZE)
+      _ <-
+        if (INITIAL_WINDOW_SIZE > 65535L) sendFrame(Frames.mkWindowUpdateFrame(streamId, INITIAL_WINDOW_SIZE - 65535))
+        else ZIO.unit
+      _ <- ZIO
+        .logDebug(s"Send UPDATE WINDOW, streamId = $streamId: ${INITIAL_WINDOW_SIZE - 65535}")
+        .when(INITIAL_WINDOW_SIZE > 65535L)
 
       updSyncQ <- Queue.dropping[Unit](1)
       pendingInBytes <- Ref.make(0)
@@ -574,9 +590,13 @@ class Http2Connection[Env](
       dataIn <- Queue.unbounded[ByteBuffer]
       transmitWindow <- Ref.make[Long](settings_client.INITIAL_WINDOW_SIZE)
 
-      localInboundWindowSize <- Ref.make(
-        -1
-      ) // not used - will need a hook to userspace to configure by http route.
+      localInboundWindowSize <- Ref.make[Long](INITIAL_WINDOW_SIZE)
+      _ <-
+        if (INITIAL_WINDOW_SIZE > 65535L) sendFrame(Frames.mkWindowUpdateFrame(streamId, INITIAL_WINDOW_SIZE - 65535))
+        else ZIO.unit
+      _ <- ZIO
+        .logDebug(s"Send UPDATE WINDOW, streamId = $streamId: ${INITIAL_WINDOW_SIZE - 65535}")
+        .when(INITIAL_WINDOW_SIZE > 65535L)
 
       updSyncQ <- Queue.dropping[Unit](1)
       pendingInBytes <- Ref.make(0)
@@ -690,51 +710,20 @@ class Http2Connection[Env](
     } yield ()
   }
 
-  def processInboundLocalFlowControl(streamId: Int, c: Http2Stream, dataSize: Int) = {
-    for {
-      localWin_sz <- c.inboundWindow.get
-      WINDOW <- ZIO.succeed(this.settings.INITIAL_WINDOW_SIZE)
-
-      _ <- ZIO.logTrace("INBOUND LOCAL WINDOW = " + localWin_sz + "ID= " + streamId)
-
-      _ <-
-        if (localWin_sz >= 0) {
-          for {
-            pending_sz <- c.bytesOfPendingInboundData.get
-            _ <-
-              if ((localWin_sz - dataSize) < WINDOW * 0.3) {
-                val updWin = WINDOW - pending_sz
-                if (updWin > WINDOW * 0.6) {
-                  c.inboundWindow.update(_ + updWin) *>
-                    // IO.println("Send WINDOW UPDATE local = " + updWin) >>
-                    sendFrame(Frames.mkWindowUpdateFrame(streamId, updWin))
-                } else ZIO.unit
-              } else ZIO.unit
-            // retest after update
-          } yield ()
-
-        } else ZIO.unit
-
-    } yield ()
-  }
-
   private[this] def accumData(streamId: Int, bb: ByteBuffer, dataSize: Int): Task[Unit] = {
     for {
-      o_c <- ZIO.succeed(this.streamTbl.get(streamId))
+      o_c <- ZIO.attempt(this.streamTbl.get(streamId))
       _ <- ZIO.fail(ErrorGen(streamId, Error.FRAME_SIZE_ERROR, "invalid stream id")).when(o_c.isEmpty)
-      c <- ZIO.succeed(o_c.get)
+      c <- ZIO.attempt(o_c.get)
       _ <- ZIO.succeed(c.contentLenFromDataFrames += dataSize)
 
       localWin_sz <- c.inboundWindow.get
-      _ <-
-        if (localWin_sz >= 0)
-          processInboundLocalFlowControl(streamId, c, dataSize) *> c.inboundWindow.update(
-            _ - dataSize
-          ) *> c.bytesOfPendingInboundData.update(_ + dataSize)
-        else
-          processInboundGlobalFlowControl(streamId, dataSize) *>
-            this.globalInboundWindow.update(_ - dataSize) *>
-            this.incrementGlobalPendingInboundData(dataSize)
+      _ <- this.globalInboundWindow.update(_ - dataSize) *>
+        this.incrementGlobalPendingInboundData(dataSize) *>
+        processInboundGlobalFlowControl(streamId, dataSize) *>
+        c.inboundWindow.update(_ - dataSize) *>
+        c.bytesOfPendingInboundData.update(_ + dataSize)
+
       _ <- c.inDataQ.offer(bb)
 
     } yield ()
@@ -1419,12 +1408,9 @@ class Http2Connection[Env](
                 _ <-
                   if (Flags.ACK(flags) == false) {
                     for {
-                      res <- ZIO
-                        .attempt(Http2Settings.fromSettingsArray(buffer, len)) // <<<<<<<<<<<<<<<<<
-                        .onError {
-                          // case e: scala.MatchError =>
-                          _ => sendFrame(Frames.mkPingFrame(ack = true, Array.fill[Byte](8)(0x0)))
-                        }
+                      res <- ZIO.attempt(Http2Settings.fromSettingsArray(buffer, len)).onError { _ =>
+                        sendFrame(Frames.mkPingFrame(ack = true, Array.fill[Byte](8)(0x0)))
+                      }
 
                       _ <- ZIO
                         .fail(
@@ -1466,19 +1452,28 @@ class Http2Connection[Env](
                         )
                         .when((res.INITIAL_WINDOW_SIZE & Masks.INT32) > Integer.MAX_VALUE)
 
-                      ws <- ZIO.attempt(this.settings_client.INITIAL_WINDOW_SIZE)
+                      ws <- ZIO.succeed(this.settings_client.INITIAL_WINDOW_SIZE)
                       _ <- ZIO.attempt(Http2Settings.copy(this.settings_client, res))
 
                       _ <- upddateInitialWindowSizeAllStreams(ws, res.INITIAL_WINDOW_SIZE)
+                      _ <- ZIO.succeed(this.settings.MAX_CONCURRENT_STREAMS = this.MAX_CONCURRENT_STREAMS)
+                      _ <- ZIO.succeed(this.settings.INITIAL_WINDOW_SIZE = this.INITIAL_WINDOW_SIZE)
 
-                      // _ <- IO.println("MAX_FRAME_SIZE = " + this.settings_client.MAX_FRAME_SIZE)
-
-                      _ <- ZIO.attempt(this.settings.MAX_CONCURRENT_STREAMS = this.MAX_CONCURRENT_STREAMS)
-
-                      // _ <- IO.println("MAX_FRAME_SIZE2 = " + this.settings.MAX_FRAME_SIZE)
+                      _ <- ZIO.logDebug(s"Remote INITIAL_WINDOW_SIZE ${this.settings_client.INITIAL_WINDOW_SIZE}")
+                      _ <- ZIO.logDebug(s"Server INITIAL_WINDOW_SIZE ${this.settings.INITIAL_WINDOW_SIZE}")
 
                       _ <- sendFrame(Frames.makeSettingsFrame(ack = false, this.settings)).when(settings_done == false)
-                      _ <- sendFrameLowPriority(Frames.makeSettingsAckFrame())
+                      _ <- sendFrame(Frames.makeSettingsAckFrame())
+
+                      // re-adjust inbound window if exceeds default
+                      _ <- this.globalInboundWindow.set(INITIAL_WINDOW_SIZE)
+                      _ <-
+                        if (INITIAL_WINDOW_SIZE > 65535) {
+                          sendFrame(Frames.mkWindowUpdateFrame(streamId, INITIAL_WINDOW_SIZE - 65535))
+                        } else ZIO.unit
+                      _ <- ZIO
+                        .logDebug(s"Send UPDATE WINDOW global: ${INITIAL_WINDOW_SIZE - 65535}")
+                        .when(INITIAL_WINDOW_SIZE > 65535L)
 
                       _ <- ZIO.succeed {
                         if (settings_done == false) settings_done = true
@@ -1486,21 +1481,20 @@ class Http2Connection[Env](
 
                     } yield ()
                   } else
-                    (ZIO.succeed { start = false } *> http11request.get.flatMap {
+                    (ZIO.attempt { start = false } *> http11request.get.flatMap {
                       case Some(x) => {
                         val stream = x.stream
                         val th = x.trailingHeaders
                         val h = x.headers.drop("connection")
-                        this.openStream11(1, Request(h, stream, th))
+                        this.openStream11(1, Request(h, stream, th)) // Request(id, 1, h, stream, th))
                       }
                       case None => ZIO.unit
                     }).when(start)
 
               } yield ()).catchAll {
-                case _: scala.MatchError => ZIO.logError("Settings match error") *> ZIO.unit
+                case _: scala.MatchError => ZIO.logDebug("Settings match error") *> ZIO.unit
                 case e @ _               => ZIO.fail(e)
               }
-
             case _ =>
               for {
                 _ <- ZIO
