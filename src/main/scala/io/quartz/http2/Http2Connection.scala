@@ -1257,10 +1257,10 @@ class Http2Connection[Env](
 
                 b <- hasEnded(streamId)
                 _ <- ZIO.fail(ErrorGen(streamId, Error.STREAM_CLOSED, "STREAM_CLOSED")).when(b)
-                _ <- accumData(streamId, packet0, len)
                 _ <- markEndOfStreamWithData(streamId).when((flags & Flags.END_STREAM) != 0)
                 // streams ends with data, no trailing headers for sure, reset to empty
                 _ <- setEmptyTrailingHeaders(streamId).when(((flags & Flags.END_STREAM) != 0))
+                _ <- accumData(streamId, packet0, len)
               } yield ()
 
             case FrameTypes.WINDOW_UPDATE => {
