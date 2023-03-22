@@ -2,35 +2,25 @@ package io.quartz.http2
 
 import scala.collection.mutable.ArrayBuffer
 import java.nio.channels.AsynchronousSocketChannel
-
 import java.nio.ByteBuffer
-
 import io.quartz.http2.Constants._
-
 import io.quartz.http2.model.{Request, Response, Method, Headers, ContentType, StatusCode}
 import io.quartz.http2.model.Method._
 import io.quartz.netio._
-
 import scala.collection.mutable
-
 import scala.concurrent.duration.FiniteDuration
 import concurrent.duration.DurationInt
-
 import java.nio.charset.StandardCharsets
-
 import scala.jdk.CollectionConverters.MapHasAsScala
-
 import io.quartz.http2.routes.Routes
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.Executors
 import scala.concurrent.ExecutionContext
-
 import zio.{ZIO, Task, Promise, Queue, Fiber, Chunk, Ref, Semaphore}
 import zio.stream.{ZStream, ZChannel, ZPipeline}
 import io.quartz.http2.routes.HttpRoute
 import concurrent.duration.DurationInt
 import java.net.URI
-
 import Http2ClientConnection.EmptyStream
 
 case class ClientResponse(

@@ -1,4 +1,4 @@
- package io.quartz.http2
+package io.quartz.http2
 
 import io.quartz.http2.Constants._
 import java.nio.ByteBuffer
@@ -107,7 +107,6 @@ object Frames {
 
   }
 
-
   def makeSettingsAckFrame(): ByteBuffer = {
 
     val payloadSize = 0
@@ -115,6 +114,31 @@ object Frames {
     val flags = Flags.ACK.toInt
 
     writeFrameHeader(payloadSize, FrameTypes.SETTINGS, flags.toByte, 0, buffer)
+
+    buffer.flip()
+    buffer
+  }
+
+  def makeSettingsFrameClient(
+      ack: Boolean = true,
+      settings: Http2Settings
+  ): ByteBuffer = {
+
+    val payloadSize = 3 * 6
+    val buffer = ByteBuffer.allocate(HeaderSize + payloadSize)
+    val flags = if (ack) Flags.ACK.toInt else 0x0
+
+    writeFrameHeader(payloadSize, FrameTypes.SETTINGS, flags.toByte, 0, buffer)
+
+    buffer.putShort(SettingsTypes.ENABLE_PUSH).putInt(settings.ENABLE_PUSH)
+
+    buffer
+      .putShort(SettingsTypes.INITIAL_WINDOW_SIZE)
+      .putInt(settings.INITIAL_WINDOW_SIZE)
+
+    buffer
+      .putShort(SettingsTypes.MAX_CONCURRENT_STREAMS)
+      .putInt(100)
 
     buffer.flip()
     buffer
@@ -312,7 +336,7 @@ object Frames {
 
     s
   }*/
-/*
+  /*
   def decodeSettingsPacket(buffer: ByteBuffer): Http2Settings = {
     val len = getLengthField(buffer)
     val frameType = buffer.get()
