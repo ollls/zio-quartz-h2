@@ -48,7 +48,7 @@ object Http2Connection {
 
   def make[Env](
       ch: IOChannel,
-      id :Long,
+      id: Long,
       maxStreams: Int,
       keepAliveMs: Int,
       httpRoute: HttpRoute[Env],
@@ -250,7 +250,7 @@ case class Http2Stream(
 
 class Http2Connection[Env](
     ch: IOChannel,
-    val id : Long,
+    val id: Long,
     httpRoute: HttpRoute[Env],
     httpReq11: Ref[Option[Request]],
     outq: Queue[ByteBuffer],
@@ -1257,10 +1257,10 @@ class Http2Connection[Env](
 
                 b <- hasEnded(streamId)
                 _ <- ZIO.fail(ErrorGen(streamId, Error.STREAM_CLOSED, "STREAM_CLOSED")).when(b)
-                _ <- markEndOfStreamWithData(streamId).when((flags & Flags.END_STREAM) != 0)
                 // streams ends with data, no trailing headers for sure, reset to empty
                 _ <- setEmptyTrailingHeaders(streamId).when(((flags & Flags.END_STREAM) != 0))
                 _ <- accumData(streamId, packet0, len)
+                _ <- markEndOfStreamWithData(streamId).when((flags & Flags.END_STREAM) != 0)
               } yield ()
 
             case FrameTypes.WINDOW_UPDATE => {
@@ -1446,7 +1446,7 @@ class Http2Connection[Env](
                         val stream = x.stream
                         val th = x.trailingHeaders
                         val h = x.headers.drop("connection")
-                        this.openStream11(1, Request(id,1, h, stream, th))
+                        this.openStream11(1, Request(id, 1, h, stream, th))
                       }
                       case None => ZIO.unit
                     }).when(start)
