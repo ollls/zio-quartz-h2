@@ -771,7 +771,7 @@ class Http2Connection[Env](
             .when(contentLenFromHeader.isDefined && c.contentLenFromDataFrames != contentLenFromHeader.get)
 
         } yield ()
-    )
+    ).catchAll( e => ZIO.logError( s"markEndOfStream():  Stream $streamId closed already"))
 
   private[this] def haveHeadersEnded(streamId: Int): Task[Boolean] = {
     for {
