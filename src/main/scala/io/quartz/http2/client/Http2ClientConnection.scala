@@ -586,7 +586,7 @@ class Http2ClientConnection(
     * @param b
     *   The HTTP/2 packet to send.
     */
-  def sendFrame(b: ByteBuffer) = outq.offer(b)
+  def sendFrame(b: => ByteBuffer) = outq.offer(b)
 
   /** Generate stream header frames from the provided header sequence
     *
@@ -892,7 +892,7 @@ class Http2ClientConnection(
     }
   }
 
-  private[this] def sendDataFrame(streamId: Int, bb: ByteBuffer): Task[Unit] =
+  private[this] def sendDataFrame(streamId: Int, bb: => ByteBuffer): Task[Unit] =
     for {
       t <- ZIO.attempt(parseFrame(bb))
       len = t._1

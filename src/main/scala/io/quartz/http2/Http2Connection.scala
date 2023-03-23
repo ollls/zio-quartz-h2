@@ -347,7 +347,7 @@ class Http2Connection[Env](
             // frameType = t._2
             flags = t._3
             // streamId = t._4
-            _ <- this.sendFrameLowPriority(data_frame)
+            _ <- this.sendFrame(data_frame)
             x <- outDataQEventQ.take
             _ <- outDataQEventQ.take.when(
               x == true
@@ -853,7 +853,7 @@ class Http2Connection[Env](
     } yield (bytesCredit)
   }
 
-  def sendDataFrame(streamId: Int, bb: ByteBuffer): Task[Unit] =
+  def sendDataFrame(streamId: Int, bb: => ByteBuffer): Task[Unit] =
     for {
       t <- ZIO.attempt(Http2Connection.parseFrame(bb))
       len = t._1
@@ -868,9 +868,8 @@ class Http2Connection[Env](
       }
     } yield ()
 
-  def sendFrame(b: ByteBuffer) = outq.offer(b)
+  def sendFrame(b: => ByteBuffer) = outq.offer(b)
 
-  def sendFrameLowPriority(b: ByteBuffer) = outq.offer(b)
 
   ////////////////////////////////////////////
 
