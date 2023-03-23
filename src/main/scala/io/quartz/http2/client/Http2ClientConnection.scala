@@ -438,8 +438,8 @@ class Http2ClientConnection(
 
     win_sz <- inboundWindow.get
 
-    _ <- sendFrame(Frames.mkWindowUpdateFrame(0, win_sz.toInt - 65535))
-      .when(INITIAL_WINDOW_SIZE > 65535)
+    _ <- ZIO.when(INITIAL_WINDOW_SIZE > 65535)(sendFrame(Frames.mkWindowUpdateFrame(0, win_sz.toInt - 65535)))
+
     _ <- ZIO
       .logDebug(s"Client: Send initial WINDOW UPDATE global ${win_sz - 65535} streamId=0")
       .when(INITIAL_WINDOW_SIZE > 65535)
@@ -512,8 +512,10 @@ class Http2ClientConnection(
           bb <- ZIO.attempt(headerFrame(streamId, settings, Priority.NoPriority, endStreamInHeaders, headerEncoder, h1))
           _ <- ZIO.foreach(bb)(b => sendFrame(b))
 
-          _ <- sendFrame(Frames.mkWindowUpdateFrame(streamId, INITIAL_WINDOW_SIZE - 65535))
-            .when(INITIAL_WINDOW_SIZE > 65535 && endStreamInHeaders == false)
+          _ <- ZIO.when(INITIAL_WINDOW_SIZE > 65535 && endStreamInHeaders == false)(
+            sendFrame(Frames.mkWindowUpdateFrame(streamId, INITIAL_WINDOW_SIZE - 65535))
+          )
+
           _ <- ZIO
             .logDebug(s"Client: Send initial WINDOW UPDATE ${INITIAL_WINDOW_SIZE - 65535} streamId=$streamId")
             .when(INITIAL_WINDOW_SIZE > 65535 && endStreamInHeaders == false)
@@ -586,7 +588,7 @@ class Http2ClientConnection(
     * @param b
     *   The HTTP/2 packet to send.
     */
-  def sendFrame(b: => ByteBuffer) = outq.offer(b)
+  def sendFrame(b: ByteBuffer) = outq.offer(b)
 
   /** Generate stream header frames from the provided header sequence
     *
@@ -892,7 +894,7 @@ class Http2ClientConnection(
     }
   }
 
-  private[this] def sendDataFrame(streamId: Int, bb: => ByteBuffer): Task[Unit] =
+  private[this] def sendDataFrame(streamId: Int, bb: ByteBuffer): Task[Unit] =
     for {
       t <- ZIO.attempt(parseFrame(bb))
       len = t._1
