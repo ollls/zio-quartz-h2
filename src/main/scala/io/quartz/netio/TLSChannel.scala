@@ -17,7 +17,12 @@ import zio.{ZIO, Task}
 import java.nio.ByteBuffer
 import zio.Chunk
 
-import java.nio.channels.{AsynchronousChannelGroup, AsynchronousServerSocketChannel, AsynchronousSocketChannel, CompletionHandler}
+import java.nio.channels.{
+  AsynchronousChannelGroup,
+  AsynchronousServerSocketChannel,
+  AsynchronousSocketChannel,
+  CompletionHandler
+}
 
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
@@ -34,12 +39,12 @@ sealed case class TLSChannelError(msg: String) extends Exception(msg)
 object TLSChannel {
 
   val READ_HANDSHAKE_TIMEOUT_MS = 5000
-  val TLS_PROTOCOL_TAG          = "TLSv1.2"
+  val TLS_PROTOCOL_TAG = "TLSv1.2"
 
   private def loadDefaultKeyStore(): KeyStore = {
     val relativeCacertsPath = "/lib/security/cacerts".replace("/", File.separator);
-    val filename            = System.getProperty("java.home") + relativeCacertsPath;
-    val is                  = new FileInputStream(filename);
+    val filename = System.getProperty("java.home") + relativeCacertsPath;
+    val is = new FileInputStream(filename);
 
     val keystore = KeyStore.getInstance(KeyStore.getDefaultType());
     val password = "changeit";
@@ -57,14 +62,14 @@ object TLSChannel {
       loadDefaultKeyStore()
     } else {
       val keyStore: KeyStore = KeyStore.getInstance("JKS")
-      val ks                 = new java.io.FileInputStream(JKSkeystore)
+      val ks = new java.io.FileInputStream(JKSkeystore)
       keyStore.load(ks, password.toCharArray())
       keyStore
     }
 
     val trustMgrs = if (JKSkeystore == null) {
       Array[TrustManager](new X509TrustManager() {
-        def getAcceptedIssuers(): Array[X509Certificate]                   = null
+        def getAcceptedIssuers(): Array[X509Certificate] = null
         def checkClientTrusted(c: Array[X509Certificate], a: String): Unit = ()
         def checkServerTrusted(c: Array[X509Certificate], a: String): Unit = ()
       })
@@ -98,8 +103,8 @@ object TLSChannel {
           ZIO.attemptBlocking(SSLContext.getDefault())
         else ZIO.attemptBlocking(buildSSLContext(TLS_PROTOCOL_TAG, trustKeystore, password))
       tcp_c <- TCPChannel.connect(host, port, group)
-      ch    <- ZIO.attempt(new TLSChannel(ssl_ctx, tcp_c))
-      _     <- ch.ssl_initClient()
+      ch <- ZIO.attempt(new TLSChannel(ssl_ctx, tcp_c))
+      _ <- ch.ssl_initClient()
     } yield (ch)
     T
   }
@@ -108,8 +113,8 @@ object TLSChannel {
 class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
 
   var f_SSL: SSLEngine = new SSLEngine(ctx.createSSLEngine())
-  val TLS_PACKET_SZ    = f_SSL.engine.getSession().getPacketBufferSize()
-  val APP_PACKET_SZ    = f_SSL.engine.getSession().getApplicationBufferSize()
+  val TLS_PACKET_SZ = f_SSL.engine.getSession().getPacketBufferSize()
+  val APP_PACKET_SZ = f_SSL.engine.getSession().getApplicationBufferSize()
 
   // how many packets we can consume per read() call N of TLS_PACKET_SZ  -> N of APP_PACKET_SZ
   val MULTIPLER = 4
@@ -125,9 +130,9 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
     val result = for {
       sequential_unwrap_flag <- Ref.make(false)
 
-      in_buf  <- ZIO.attempt(ByteBuffer.allocate(TLS_PACKET_SZ))
+      in_buf <- ZIO.attempt(ByteBuffer.allocate(TLS_PACKET_SZ))
       out_buf <- ZIO.attempt(ByteBuffer.allocate(TLS_PACKET_SZ))
-      empty   <- ZIO.attempt(ByteBuffer.allocate(0))
+      empty <- ZIO.attempt(ByteBuffer.allocate(0))
 
       _ <- f_SSL.wrap(empty, out_buf) *> ZIO.attempt(out_buf.flip) *> rch.write(out_buf)
       _ <- ZIO.attempt(out_buf.clear)
@@ -139,9 +144,9 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
               pos_ <- ZIO.attempt(in_buf.position())
               lim_ <- ZIO.attempt(in_buf.limit())
 
-              _      <- ZIO.attempt(out_buf.clear())
+              _ <- ZIO.attempt(out_buf.clear())
               result <- f_SSL.wrap(empty, out_buf)
-              _      <- ZIO.attempt(out_buf.flip)
+              _ <- ZIO.attempt(out_buf.flip)
               // prevent reset to read if buffer has more data, now we can realy on underflow processing later
               _ <-
                 if (pos_ > 0 && pos_ < lim_) ZIO.unit
@@ -162,8 +167,8 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
 
                   _ <- if (nb == -1) ZIO.fail(new TLSChannelError("TLS Handshake, broken pipe")) else ZIO.unit
 
-                  _      <- ZIO.attempt(in_buf.flip)
-                  _      <- sequential_unwrap_flag.set(true)
+                  _ <- ZIO.attempt(in_buf.flip)
+                  _ <- sequential_unwrap_flag.set(true)
                   result <- f_SSL.unwrap(in_buf, out_buf)
                 } yield (result.getHandshakeStatus())
               else
@@ -201,9 +206,9 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
                                 if (nb == -1) ZIO.fail(new TLSChannelError("TLS Handshake, broken pipe"))
                                 else ZIO.unit
 
-                              p2 <- ZIO.attempt(in_buf.position())   // new limit
-                              _  <- ZIO.attempt(in_buf.limit(p2))
-                              _  <- ZIO.attempt(in_buf.position(p1)) // back to original position, we had before read
+                              p2 <- ZIO.attempt(in_buf.position()) // new limit
+                              _ <- ZIO.attempt(in_buf.limit(p2))
+                              _ <- ZIO.attempt(in_buf.position(p1)) // back to original position, we had before read
 
                               r <- f_SSL
                                 .unwrap(in_buf, out_buf) // .map( r => { println( "SECOND " + r.toString); r })
@@ -242,13 +247,13 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
 
   private[this] def doHandshake(): Task[(HandshakeStatus, Chunk[Byte])] = {
     var loop_cntr = 0 // to avoid issues with non-SSL sockets sending junk data
-    var temp      = 0
+    var temp = 0
     val result = for {
       sequential_unwrap_flag <- Ref.make(false)
 
-      in_buf  <- ZIO.attempt(ByteBuffer.allocate(TLS_PACKET_SZ))
+      in_buf <- ZIO.attempt(ByteBuffer.allocate(TLS_PACKET_SZ))
       out_buf <- ZIO.attempt(ByteBuffer.allocate(TLS_PACKET_SZ))
-      empty   <- ZIO.attempt(ByteBuffer.allocate(0))
+      empty <- ZIO.attempt(ByteBuffer.allocate(0))
 
       nbw <- rch
         .readBuffer(in_buf, TLSChannel.READ_HANDSHAKE_TIMEOUT_MS)
@@ -262,10 +267,10 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
 
           case NEED_WRAP =>
             for {
-              _               <- ZIO.attempt(out_buf.clear)
-              result          <- f_SSL.wrap(empty, out_buf)
-              _               <- ZIO.attempt(out_buf.flip)
-              _               <- sequential_unwrap_flag.set(false)
+              _ <- ZIO.attempt(out_buf.clear)
+              result <- f_SSL.wrap(empty, out_buf)
+              _ <- ZIO.attempt(out_buf.flip)
+              _ <- sequential_unwrap_flag.set(false)
               handshakeStatus <- rch.write(out_buf) *> ZIO.succeed(result.getHandshakeStatus)
             } yield (handshakeStatus)
 
@@ -278,10 +283,10 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
                   nbr <- rch
                     .readBuffer(in_buf, TLSChannel.READ_HANDSHAKE_TIMEOUT_MS)
                     .mapError(e => new TLSChannelError("TLS Handshake error timeout: " + e.toString))
-                  _      <- if (nbr == -1) ZIO.fail(new TLSChannelError("TLS Handshake, broken pipe")) else ZIO.unit
-                  _      <- ZIO.succeed { temp = nbr }
-                  _      <- ZIO.attempt(in_buf.flip)
-                  _      <- sequential_unwrap_flag.set(true)
+                  _ <- if (nbr == -1) ZIO.fail(new TLSChannelError("TLS Handshake, broken pipe")) else ZIO.unit
+                  _ <- ZIO.succeed { temp = nbr }
+                  _ <- ZIO.attempt(in_buf.flip)
+                  _ <- sequential_unwrap_flag.set(true)
                   result <- f_SSL.unwrap(in_buf, out_buf)
                 } yield (result.getHandshakeStatus())
               else
@@ -326,9 +331,9 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
       _ <- f_SSL.unwrap(in_buf, out_buf).repeatWhile { rs =>
         ((rs.getStatus() == SSLEngineResult.Status.OK) && (in_buf.remaining() != 0))
       }
-      pos      <- ZIO.attempt(out_buf.position())
-      _        <- ZIO.attempt(out_buf.flip())
-      _        <- ZIO.attempt(out_buf.limit(pos))
+      pos <- ZIO.attempt(out_buf.position())
+      _ <- ZIO.attempt(out_buf.flip())
+      _ <- ZIO.attempt(out_buf.limit(pos))
       leftOver <- ZIO.attempt(Chunk.fromByteBuffer(out_buf))
 
       _ <- ZIO.attempt(in_buf.limit(temp))
@@ -343,10 +348,10 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
   // close with TLS close_notify
   final def close(): Task[Unit] = {
     val result = for {
-      _     <- ZIO.attempt(f_SSL.engine.getSession().invalidate())
-      _     <- f_SSL.closeOutbound()
+      _ <- ZIO.attempt(f_SSL.engine.getSession().invalidate())
+      _ <- f_SSL.closeOutbound()
       empty <- ZIO.attempt(ByteBuffer.allocate(0))
-      out   <- ZIO.attempt(ByteBuffer.allocate(TLS_PACKET_SZ))
+      out <- ZIO.attempt(ByteBuffer.allocate(TLS_PACKET_SZ))
       loop = f_SSL.wrap(empty, out) *> f_SSL.isOutboundDone()
       _ <- loop.repeatUntil((status: Boolean) => status)
       _ <- ZIO.attempt(out.flip)
@@ -357,8 +362,9 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
     result.catchAll(_ => ZIO.unit)
   }
 
-  // Client side SSL Init
-  // for 99% there will be no leftover but under extreme load or upon JVM init it happens
+ /**
+    * Client side ssl init.
+    */
   def ssl_initClient(): Task[Unit] = {
     for {
       _ <- f_SSL.setUseClientMode(true)
@@ -369,6 +375,25 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
         } else ZIO.unit
     } yield ()
 
+  }
+
+  /**
+    * Client side ssl init with http/2 alpn tag only.
+    */
+  def ssl_initClent_h2(): Task[Unit] = {
+    for {
+      _ <- f_SSL.setUseClientMode(true)
+      sslParameters <- ZIO.attempt(f_SSL.engine.getSSLParameters())
+      _ <- ZIO.attempt(sslParameters.setApplicationProtocols(Array("h2")))
+      _ <- ZIO.attempt(f_SSL.engine.setSSLParameters(sslParameters))
+      x <- doHandshakeClient()
+      _ <-
+        if (x != FINISHED) {
+          ZIO.fail(
+            new TLSChannelError("TLS Handshake error, plain text connection?")
+          )
+        } else ZIO.unit
+    } yield ()
   }
 
   // Server side SSL Init
@@ -418,7 +443,7 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
       // _ <- IO(out.clear)
 
       loop = for {
-        res  <- f_SSL.wrap(in, out)
+        res <- f_SSL.wrap(in, out)
         stat <- ZIO.succeed(res.getStatus())
         _ <-
           if (stat != SSLEngineResult.Status.OK) {
@@ -448,19 +473,19 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
       _ <- ZIO.attempt(IN_J_BUFFER.flip)
 
       loop = for {
-        res  <- f_SSL.unwrap(IN_J_BUFFER, out)
+        res <- f_SSL.unwrap(IN_J_BUFFER, out)
         stat <- ZIO.attempt(res.getStatus())
         rem <-
           if (stat != SSLEngineResult.Status.OK) {
             if (stat == SSLEngineResult.Status.BUFFER_UNDERFLOW || stat == SSLEngineResult.Status.BUFFER_OVERFLOW)
               ZIO.succeed(0)
             else
-              ZIO.fail(new TLSChannelError("read() error, socket closed") )//res.toString()))
+              ZIO.fail(new TLSChannelError("read() error, socket closed")) // res.toString()))
           } else ZIO.attempt(IN_J_BUFFER.remaining())
       } yield (rem)
-      _        <- loop.repeatWhile(_ != 0)
+      _ <- loop.repeatWhile(_ != 0)
       save_pos <- ZIO.attempt(out.position())
-      _        <- ZIO.attempt(out.flip)
+      _ <- ZIO.attempt(out.flip)
       // ****compact, some data may be carried over for next read call
       _ <- ZIO.attempt(IN_J_BUFFER.compact)
     } yield (save_pos)
@@ -471,8 +496,8 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
 
   def read(timeoutMs: Int): Task[Chunk[Byte]] = {
     for {
-      bb    <- ZIO.attempt(ByteBuffer.allocate(MULTIPLER * APP_PACKET_SZ))
-      n     <- readBuffer(bb, timeoutMs)
+      bb <- ZIO.attempt(ByteBuffer.allocate(MULTIPLER * APP_PACKET_SZ))
+      n <- readBuffer(bb, timeoutMs)
       chunk <- ZIO.attempt(Chunk.fromByteBuffer(bb))
     } yield (chunk)
   }
