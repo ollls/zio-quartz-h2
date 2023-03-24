@@ -753,7 +753,7 @@ class Http2Connection[Env](
             )
           )
         } yield ()
-    )//.catchAll(e => ZIO.logError(s"markEndOfStream():  Stream $streamId closed already"))
+    )
 
   private[this] def haveHeadersEnded(streamId: Int): Task[Boolean] = {
     for {
@@ -959,6 +959,9 @@ class Http2Connection[Env](
             }
           } yield ()
       }
+      // no impact wait, response already sent, http/2 connection kept open, stream half-closed.
+      // just to make sure you won't get streamId not found due to a race between server and client
+      _ <- ZIO.sleep(zio.Duration.fromMillis(io.quartz.QuartzH2Server.DELAY_BEFORE_STREAM_DISCARDED_MS))
       _ <- closeStream(streamId)
     } yield ()
 
