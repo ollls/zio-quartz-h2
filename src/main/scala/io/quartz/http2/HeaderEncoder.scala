@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
- package io.quartz.http2
+package io.quartz.http2
 
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
@@ -41,13 +41,20 @@ class HeaderEncoder(initialMaxTableSize: Int) {
     encoder.setMaxHeaderTableSize(os, max)
 
   /** Encode the headers into the payload of a HEADERS frame */
-  def encodeHeaders(hs: Headers): ByteBuffer = {  //hSem used
+  def encodeHeaders(hs: Headers): ByteBuffer = { // hSem used
+    // standard pseudo heasers first - it is a requirement
     hs.foreach { case (k, v) =>
       val keyBytes = k.toLowerCase().getBytes(US_ASCII)
       val valueBytes = v.getBytes(US_ASCII)
-      encoder.encodeHeader(os, keyBytes, valueBytes, false)
+      if (keyBytes(0) == ':')
+        encoder.encodeHeader(os, keyBytes, valueBytes, false)
     }
-
+    hs.foreach { case (k, v) =>
+      val keyBytes = k.toLowerCase().getBytes(US_ASCII)
+      val valueBytes = v.getBytes(US_ASCII)
+      if (keyBytes(0) != ':')
+        encoder.encodeHeader(os, keyBytes, valueBytes, false)
+    }
     val buff = ByteBuffer.wrap(os.toByteArray())
 
     os.reset()
@@ -76,10 +83,11 @@ class HeaderDecoder(maxHeaderListSize: Int, val maxTableSize: Int) {
       val name_s = new String(name, US_ASCII)
       val value_s = new String(value, US_ASCII)
 
-      if ( name_s.startsWith( ":" ) == false ) regularHeaderWasAdded = true
-      else if( regularHeaderWasAdded == true  ) throw new Exception("An attempt to add pseudo header after a regular header")
+      if (name_s.startsWith(":") == false) regularHeaderWasAdded = true
+      else if (regularHeaderWasAdded == true)
+        throw new Exception("An attempt to add pseudo header after a regular header")
 
-      //System.out.println(new String(name, US_ASCII) + " ------> " + new String(value, US_ASCII))
+      // System.out.println(new String(name, US_ASCII) + " ------> " + new String(value, US_ASCII))
 
       headerBlockSize += 32 + name.length + value.length // implement size check!!!!
       headers = headers + (name_s -> value_s)
