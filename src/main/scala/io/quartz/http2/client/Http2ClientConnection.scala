@@ -332,18 +332,14 @@ class Http2ClientConnection(
           buffer.limit(lim)
           for {
             _ <- accumHeaders(streamId, buffer)
-            _ <- triggerStream(streamId, flags).when(
-              (flags & Flags.END_HEADERS) != 0
-            )
+            _ <- ZIO.when((flags & Flags.END_HEADERS) != 0)(triggerStream(streamId, flags))
           } yield ()
 
         // padding for CONTINUATION ??? read about it
         case FrameTypes.CONTINUATION =>
           for {
             _ <- accumHeaders(streamId, buffer)
-            _ <- triggerStream(streamId, flags).when(
-              (flags & Flags.END_HEADERS) != 0
-            )
+            _ <- ZIO.when((flags & Flags.END_HEADERS) != 0)(triggerStream(streamId, flags))
           } yield ()
 
         case FrameTypes.PING =>
@@ -351,15 +347,15 @@ class Http2ClientConnection(
           buffer.get(data)
           if ((flags & Flags.ACK) == 0) {
             for {
-              _ <- ZIO
-                .fail(
+              _ <- ZIO.when(streamId != 0)(
+                ZIO.fail(
                   ErrorGen(
                     streamId,
                     Error.PROTOCOL_ERROR,
                     "Ping streamId not 0"
                   )
                 )
-                .when(streamId != 0)
+              )
               _ <- sendFrame(Frames.mkPingFrame(ack = true, data))
             } yield ()
           } else ZIO.unit // else if (this.start)
@@ -367,11 +363,8 @@ class Http2ClientConnection(
         case FrameTypes.DATA => accumData(streamId, packet0, len)
 
         case FrameTypes.SETTINGS =>
-          // IO.println("ACK CAME").whenA(Flags.ACK(flags) == true) >>
-          // sendFrame(Frames.makeSettingsAckFrame()).whenA(Flags.ACK(flags) == true) >>
-          // sendFrame(Frames.mkPingFrame( false, Array[Byte]( 0,0,0,0,0,0,0,0))).whenA(Flags.ACK(flags) == true) >>
-          awaitSettings.complete(ZIO.succeed(true)).when(Flags.ACK(flags) == true) *>
-            (for {
+          ZIO.when(Flags.ACK(flags) == true)(awaitSettings.complete(ZIO.succeed(true))) *>
+            ZIO.when(Flags.ACK(flags) == false)(for {
               current_size <- settings1.get.map(settings => settings.INITIAL_WINDOW_SIZE)
               res <- ZIO.attempt(Http2Settings.fromSettingsArray(buffer, len))
 
@@ -380,9 +373,7 @@ class Http2ClientConnection(
                 current_size,
                 res.INITIAL_WINDOW_SIZE
               )
-              // _ <- sendFrame(Frames.makeSettingsAckFrame())
-              // _ <- awaitSettings.complete(true)
-            } yield ()).when(Flags.ACK(flags) == false)
+            } yield ())
 
         case FrameTypes.WINDOW_UPDATE => {
           val increment = buffer.getInt() & Masks.INT31
@@ -440,9 +431,9 @@ class Http2ClientConnection(
 
     _ <- ZIO.when(INITIAL_WINDOW_SIZE > 65535)(sendFrame(Frames.mkWindowUpdateFrame(0, win_sz.toInt - 65535)))
 
-    _ <- ZIO
-      .logDebug(s"Client: Send initial WINDOW UPDATE global ${win_sz - 65535} streamId=0")
-      .when(INITIAL_WINDOW_SIZE > 65535)
+    _ <- ZIO.when(INITIAL_WINDOW_SIZE > 65535)(
+      ZIO.logDebug(s"Client: Send initial WINDOW UPDATE global ${win_sz - 65535} streamId=0")
+    )
 
     _ <- awaitSettings.await
 
@@ -516,9 +507,10 @@ class Http2ClientConnection(
             sendFrame(Frames.mkWindowUpdateFrame(streamId, INITIAL_WINDOW_SIZE - 65535))
           )
 
-          _ <- ZIO
-            .logDebug(s"Client: Send initial WINDOW UPDATE ${INITIAL_WINDOW_SIZE - 65535} streamId=$streamId")
-            .when(INITIAL_WINDOW_SIZE > 65535 && endStreamInHeaders == false)
+          _ <- ZIO.when(INITIAL_WINDOW_SIZE > 65535 && endStreamInHeaders == false)(
+            ZIO.logDebug(s"Client: Send initial WINDOW UPDATE ${INITIAL_WINDOW_SIZE - 65535} streamId=$streamId")
+          )
+
         } yield (stream))
       }
 
@@ -532,11 +524,12 @@ class Http2ClientConnection(
             .foreach { chunk =>
               for {
                 chunk0 <- pref.get
-                _ <- ZIO
-                  .foreach(dataFrame(streamId, false, ByteBuffer.wrap(chunk0.toArray), settings.MAX_FRAME_SIZE - 128))(
-                    b => sendDataFrame(streamId, b)
-                  )
-                  .when(chunk0.nonEmpty)
+                _ <- ZIO.when(chunk0.nonEmpty)(
+                  ZIO.foreach(
+                    dataFrame(streamId, false, ByteBuffer.wrap(chunk0.toArray), settings.MAX_FRAME_SIZE - 128)
+                  )(b => sendDataFrame(streamId, b))
+                )
+
                 _ <- pref.set(chunk)
               } yield ()
             }
@@ -544,10 +537,11 @@ class Http2ClientConnection(
 
       lastChunk <- pref.get
       _ <- (ZIO
-        .foreach(dataFrame(streamId, true, ByteBuffer.wrap(lastChunk.toArray), settings.MAX_FRAME_SIZE - 128))(b =>
-          sendDataFrame(streamId, b)
+        .when(endStreamInHeaders == false)(
+          ZIO.foreach(dataFrame(streamId, true, ByteBuffer.wrap(lastChunk.toArray), settings.MAX_FRAME_SIZE - 128))(b =>
+            sendDataFrame(streamId, b)
+          )
         ))
-        .when(endStreamInHeaders == false)
         .unit
 
       // END OF DATA /////
@@ -557,7 +551,7 @@ class Http2ClientConnection(
 
       // wait for response
       pair <- stream.d.await
-      _ <- ZIO.fail(new java.nio.channels.ClosedChannelException()).when(pair == null)
+      _ <- ZIO.when(pair == null)(ZIO.fail(new java.nio.channels.ClosedChannelException()))
       flags = pair._1
       h = pair._2
       _ <- ZIO.logTrace(
@@ -666,19 +660,17 @@ class Http2ClientConnection(
   ): Task[ByteBuffer] = {
     for {
       bb <- q.take
-      _ <- ZIO
-        .fail(java.nio.channels.ClosedChannelException())
-        .when(bb == null)
+      _ <- ZIO.when(bb == null)(ZIO.fail(java.nio.channels.ClosedChannelException()))
       tp <- ZIO.attempt(parseFrame(bb))
       streamId = tp._4
       len = tp._1
 
       o_stream <- ZIO.attempt(c.streamTbl.get(streamId))
-      _ <- ZIO
-        .fail(
+      _ <- ZIO.when(o_stream.isEmpty)(
+        ZIO.fail(
           ErrorGen(streamId, Error.FRAME_SIZE_ERROR, "invalid stream id")
         )
-        .when(o_stream.isEmpty)
+      )
       stream <- ZIO.attempt(o_stream.get)
 
       ////////////////////////////////////////////////
@@ -693,17 +685,17 @@ class Http2ClientConnection(
         if (INITIAL_WINDOW_SIZE > bytes_pending) INITIAL_WINDOW_SIZE - bytes_pending
         else INITIAL_WINDOW_SIZE
       }
-      _ <- c
-        .sendFrame(Frames.mkWindowUpdateFrame(0, globalWinIncrement))
-        .when(globalWinIncrement > INITIAL_WINDOW_SIZE * 0.7 && bytes_available < INITIAL_WINDOW_SIZE * 0.3)
+      _ <- ZIO.when(globalWinIncrement > INITIAL_WINDOW_SIZE * 0.7 && bytes_available < INITIAL_WINDOW_SIZE * 0.3)(
+        c.sendFrame(Frames.mkWindowUpdateFrame(0, globalWinIncrement))
+      )
 
-      _ <- this.inboundWindow
-        .update(_ + globalWinIncrement)
-        .when(globalWinIncrement > INITIAL_WINDOW_SIZE * 0.7 && bytes_available < INITIAL_WINDOW_SIZE * 0.3)
+      _ <- ZIO.when(globalWinIncrement > INITIAL_WINDOW_SIZE * 0.7 && bytes_available < INITIAL_WINDOW_SIZE * 0.3)(
+        this.inboundWindow.update(_ + globalWinIncrement)
+      )
 
-      _ <- ZIO
-        .logDebug(s"Client: Send WINDOW UPDATE global $globalWinIncrement $bytes_available")
-        .when(globalWinIncrement > INITIAL_WINDOW_SIZE * 0.7 && bytes_available < INITIAL_WINDOW_SIZE * 0.3)
+      _ <- ZIO.when(globalWinIncrement > INITIAL_WINDOW_SIZE * 0.7 && bytes_available < INITIAL_WINDOW_SIZE * 0.3)(
+        ZIO.logDebug(s"Client: Send WINDOW UPDATE global $globalWinIncrement $bytes_available")
+      )
       //////////////////////////////////////////////
       // local counter
       _ <- c.updateStreamWith(
@@ -767,7 +759,7 @@ class Http2ClientConnection(
   ): Task[Unit] = {
     for {
       o_c <- ZIO.attempt(this.streamTbl.get(streamId))
-      _ <- ZIO.fail(ErrorGen(streamId, Error.FRAME_SIZE_ERROR, "invalid stream id")).when(o_c.isEmpty)
+      _ <- ZIO.when(o_c.isEmpty)(ZIO.fail(ErrorGen(streamId, Error.FRAME_SIZE_ERROR, "invalid stream id")))
       c <- ZIO.attempt(o_c.get)
       _ <- this.inboundWindow.update(_ - dataSize) *>
         this.incrementGlobalPendingInboundData(dataSize) *>
@@ -935,55 +927,56 @@ class Http2ClientConnection(
 
   private[this] def updateWindow(streamId: Int, inc: Int): Task[Unit] = {
     // IO.println( "Update Window()") >>
-    ZIO
-      .fail(
+    ZIO.when(inc == 0)(
+      ZIO.fail(
         ErrorGen(
           streamId,
           Error.PROTOCOL_ERROR,
           "Sends a WINDOW_UPDATE frame with a flow control window increment of 0"
         )
       )
-      .when(inc == 0) *> (if (streamId == 0)
-                            updateAndCheckGlobalTx(streamId, inc) *>
-                              ZIO
-                                .foreach(streamTbl.values.toSeq)(stream =>
-                                  for {
-                                    _ <- stream.transmitWindow.update(_ + inc)
-                                    rs <- stream.transmitWindow.get
-                                    // _ <- IO.println("RS = " + rs)
-                                    _ <- ZIO
-                                      .fail(
-                                        ErrorGen(
-                                          streamId,
-                                          Error.FLOW_CONTROL_ERROR,
-                                          "Sends multiple WINDOW_UPDATE frames increasing the flow control window to above 2^31-1"
-                                        )
-                                      )
-                                      .when(rs >= Integer.MAX_VALUE)
-                                    _ <- stream.outXFlowSync.offer(())
-                                  } yield ()
-                                )
-                                .unit
-                          else
-                            updateStreamWith(
-                              1,
-                              streamId,
-                              stream =>
-                                for {
-                                  _ <- stream.transmitWindow.update(_ + inc)
-                                  rs <- stream.transmitWindow.get
-                                  _ <- ZIO
-                                    .fail(
-                                      ErrorRst(
-                                        streamId,
-                                        Error.FLOW_CONTROL_ERROR,
-                                        ""
-                                      )
-                                    )
-                                    .when(rs >= Integer.MAX_VALUE)
-                                  _ <- stream.outXFlowSync.offer(())
-                                } yield ()
-                            ))
+    ) *> (if (streamId == 0)
+            updateAndCheckGlobalTx(streamId, inc) *>
+              ZIO
+                .foreach(streamTbl.values.toSeq)(stream =>
+                  for {
+                    _ <- stream.transmitWindow.update(_ + inc)
+                    rs <- stream.transmitWindow.get
+
+                    _ <- ZIO.when(rs >= Integer.MAX_VALUE)(
+                      ZIO.fail(
+                        ErrorGen(
+                          streamId,
+                          Error.FLOW_CONTROL_ERROR,
+                          "Sends multiple WINDOW_UPDATE frames increasing the flow control window to above 2^31-1"
+                        )
+                      )
+                    )
+                    _ <- stream.outXFlowSync.offer(())
+                  } yield ()
+                )
+                .unit
+          else
+            updateStreamWith(
+              1,
+              streamId,
+              stream =>
+                for {
+                  _ <- stream.transmitWindow.update(_ + inc)
+                  rs <- stream.transmitWindow.get
+                  _ <- ZIO.when(rs >= Integer.MAX_VALUE)(
+                    ZIO.fail(
+                      ErrorRst(
+                        streamId,
+                        Error.FLOW_CONTROL_ERROR,
+                        ""
+                      )
+                    )
+                  )
+
+                  _ <- stream.outXFlowSync.offer(())
+                } yield ()
+            ))
   }
 
 }
