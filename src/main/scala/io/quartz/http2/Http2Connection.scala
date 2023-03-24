@@ -40,9 +40,9 @@ object Http2Connection {
     for {
       bb <- outq.take
       res <- if (bb == null) ZIO.succeed(true) else ZIO.succeed(false)
-      _ <- ch.write(bb).when(res == false)
-      _ <- ZIO.logDebug("Shutdown outbound H2 packet sender").when(res == true)
-      _ <- shutdown.succeed(true).when(res == true)
+      _ <- ZIO.when(res == false)(ch.write(bb))
+      _ <- ZIO.when(res == true)(ZIO.logDebug("Shutdown outbound H2 packet sender"))
+      _ <- ZIO.when(res == true)(shutdown.succeed(true))
     } yield (res)
   }
 
@@ -123,13 +123,13 @@ object Http2Connection {
   ): Task[ByteBuffer] = {
     for {
       bb <- q.take
-      _ <- ZIO.fail(java.nio.channels.ClosedChannelException()).when(bb == null)
+      _ <- ZIO.when(bb == null)(ZIO.fail(java.nio.channels.ClosedChannelException()))
       tp <- ZIO.attempt(parseFrame(bb))
       streamId = tp._4
       len = tp._1
 
       o_stream <- ZIO.attempt(c.streamTbl.get(streamId))
-      _ <- ZIO.fail(ErrorGen(streamId, Error.FRAME_SIZE_ERROR, "invalid stream id")).when(o_stream.isEmpty)
+      _ <- ZIO.when(o_stream.isEmpty)(ZIO.fail(ErrorGen(streamId, Error.FRAME_SIZE_ERROR, "invalid stream id")))
       stream <- ZIO.attempt(o_stream.get)
 
       ////////////////////////////////////////////////
@@ -148,13 +148,15 @@ object Http2Connection {
         .sendFrame(Frames.mkWindowUpdateFrame(0, globalWinIncrement))
         .when(globalWinIncrement > c.INITIAL_WINDOW_SIZE * 0.7 && bytes_available < c.INITIAL_WINDOW_SIZE * 0.3)
 
-      _ <- c.globalInboundWindow
-        .update(_ + globalWinIncrement)
-        .when(globalWinIncrement > c.INITIAL_WINDOW_SIZE * 0.7 && bytes_available < c.INITIAL_WINDOW_SIZE * 0.3)
+      _ <- ZIO.when(globalWinIncrement > c.INITIAL_WINDOW_SIZE * 0.7 && bytes_available < c.INITIAL_WINDOW_SIZE * 0.3)(
+        c.globalInboundWindow
+          .update(_ + globalWinIncrement)
+      )
 
-      _ <- ZIO
-        .logDebug(s"Send WINDOW UPDATE global $globalWinIncrement $bytes_available")
-        .when(globalWinIncrement > c.INITIAL_WINDOW_SIZE * 0.7 && bytes_available < c.INITIAL_WINDOW_SIZE * 0.3)
+      _ <- ZIO.when(globalWinIncrement > c.INITIAL_WINDOW_SIZE * 0.7 && bytes_available < c.INITIAL_WINDOW_SIZE * 0.3)(
+        ZIO.logDebug(s"Send WINDOW UPDATE global $globalWinIncrement $bytes_available")
+      )
+
       //////////////////////////////////////////////
       // local counter
       _ <- c.updateStreamWith(
@@ -352,13 +354,10 @@ class Http2Connection[Env](
             _ <- outDataQEventQ.take.when(
               x == true
             )
-            _ <- outDataQEventQ
-              .offer(true)
-              .when(x == true) // rare case when shutdown requested interleaved with packet send which is false
-            // _ <- IO.println("Yeld true").whenA(x == true) // we need to preserve true as flag to termnate fiber
-
-            // up <- c.active.get
-            // _ <- IO(streamTbl.remove(streamId)).whenA(up == false)
+            _ <- ZIO.when(x == true)(
+              outDataQEventQ
+                .offer(true)
+            )
 
             _ <- c.done.succeed(()).when(Flags.END_STREAM(flags) == true)
 
@@ -367,15 +366,6 @@ class Http2Connection[Env](
         case None =>
           for {
             _ <- ZIO.unit
-            // up <- c.active.get
-            // _ <- c.done.complete(()).whenA(up == false)
-            // x <- outDataQEventQ.take
-            // _ <- outDataQEventQ.offer(x)
-            // _ <- IO.println( "Yeld true1" ) //.whenA( x == true )
-
-            // up <- c.active.get
-            // _ <- IO.println("REM").whenA(up == false)
-            // _ <- IO(streamTbl.remove(streamId)).whenA(up == false)
 
           } yield ()
       }
@@ -392,7 +382,7 @@ class Http2Connection[Env](
       // _ <- this.streamTbl.iterator.toSeq.foldMap[Task[Unit]](c => streamDataOutBoundProcessor(c._1, c._2))
       _ <- ZIO.foreach(this.streamTbl.iterator.toSeq)(c => streamDataOutBoundProcessor(c._1, c._2))
 
-      _ <- ZIO.logDebug("Shutdown H2 outbound data packet priority manager").when(x == true)
+      _ <- ZIO.when(x == true)(ZIO.logDebug("Shutdown H2 outbound data packet priority manager"))
 
     } yield (x)
   }
@@ -417,69 +407,71 @@ class Http2Connection[Env](
     for {
       _ <- globalTransmitWindow.update(_ + inc)
       rs <- globalTransmitWindow.get
-      _ <- ZIO
-        .fail(
+      _ <- ZIO.when(rs >= Integer.MAX_VALUE)(
+        ZIO.fail(
           ErrorGen(
             streamId,
             Error.FLOW_CONTROL_ERROR,
             "Sends multiple WINDOW_UPDATE frames increasing the flow control window to above 2^31-1"
           )
         )
-        .when(rs >= Integer.MAX_VALUE)
+      )
+
     } yield ()
   }
 
   private[this] def updateWindow(streamId: Int, inc: Int): Task[Unit] = {
     // IO.println( "Update Window()") >>
-    ZIO
-      .fail(
+    ZIO.when(inc == 0)(
+      ZIO.fail(
         ErrorGen(
           streamId,
           Error.PROTOCOL_ERROR,
           "Sends a WINDOW_UPDATE frame with a flow control window increment of 0"
         )
       )
-      .when(inc == 0) *> (if (streamId == 0)
-                            updateAndCheckGlobalTx(streamId, inc) *>
-                              ZIO
-                                .foreach(streamTbl.values.toSeq)(stream =>
-                                  for {
-                                    _ <- stream.transmitWindow.update(_ + inc)
-                                    rs <- stream.transmitWindow.get
-                                    // _ <- IO.println("RS = " + rs)
-                                    _ <- ZIO
-                                      .fail(
-                                        ErrorGen(
-                                          streamId,
-                                          Error.FLOW_CONTROL_ERROR,
-                                          "Sends multiple WINDOW_UPDATE frames increasing the flow control window to above 2^31-1"
-                                        )
-                                      )
-                                      .when(rs >= Integer.MAX_VALUE)
-                                    _ <- stream.outXFlowSync.offer(())
-                                  } yield ()
-                                )
-                                .unit
-                          else
-                            updateStreamWith(
-                              1,
-                              streamId,
-                              stream =>
-                                for {
-                                  _ <- stream.transmitWindow.update(_ + inc)
-                                  rs <- stream.transmitWindow.get
-                                  _ <- ZIO
-                                    .fail(
-                                      ErrorRst(
-                                        streamId,
-                                        Error.FLOW_CONTROL_ERROR,
-                                        ""
-                                      )
-                                    )
-                                    .when(rs >= Integer.MAX_VALUE)
-                                  _ <- stream.outXFlowSync.offer(())
-                                } yield ()
-                            ))
+    ) *> (if (streamId == 0)
+            updateAndCheckGlobalTx(streamId, inc) *>
+              ZIO
+                .foreach(streamTbl.values.toSeq)(stream =>
+                  for {
+                    _ <- stream.transmitWindow.update(_ + inc)
+                    rs <- stream.transmitWindow.get
+                    // _ <- IO.println("RS = " + rs)
+                    _ <- ZIO.when(rs >= Integer.MAX_VALUE)(
+                      ZIO.fail(
+                        ErrorGen(
+                          streamId,
+                          Error.FLOW_CONTROL_ERROR,
+                          "Sends multiple WINDOW_UPDATE frames increasing the flow control window to above 2^31-1"
+                        )
+                      )
+                    )
+                    _ <- stream.outXFlowSync.offer(())
+                  } yield ()
+                )
+                .unit
+          else
+            updateStreamWith(
+              1,
+              streamId,
+              stream =>
+                for {
+                  _ <- stream.transmitWindow.update(_ + inc)
+                  rs <- stream.transmitWindow.get
+                  _ <- ZIO.when(rs >= Integer.MAX_VALUE)(
+                    ZIO.fail(
+                      ErrorRst(
+                        streamId,
+                        Error.FLOW_CONTROL_ERROR,
+                        ""
+                      )
+                    )
+                  )
+
+                  _ <- stream.outXFlowSync.offer(())
+                } yield ()
+            ))
   }
 
   private[this] def handleStreamErrors(streamId: Int, e: Throwable): Task[Unit] = {
@@ -526,9 +518,9 @@ class Http2Connection[Env](
       _ <-
         if (INITIAL_WINDOW_SIZE > 65535L) sendFrame(Frames.mkWindowUpdateFrame(streamId, INITIAL_WINDOW_SIZE - 65535))
         else ZIO.unit
-      _ <- ZIO
-        .logDebug(s"Send UPDATE WINDOW, streamId = $streamId: ${INITIAL_WINDOW_SIZE - 65535}")
-        .when(INITIAL_WINDOW_SIZE > 65535L)
+      _ <- ZIO.when(INITIAL_WINDOW_SIZE > 65535L)(
+        ZIO.logDebug(s"Send UPDATE WINDOW, streamId = $streamId: ${INITIAL_WINDOW_SIZE - 65535}")
+      )
 
       updSyncQ <- Queue.dropping[Unit](1)
       pendingInBytes <- Ref.make(0)
@@ -564,14 +556,6 @@ class Http2Connection[Env](
 
   private[this] def openStream(streamId: Int, flags: Int): ZIO[Env, Throwable, Unit] =
     for {
-
-      // usedId <- usedStreamIdCounter.get
-      // _ <- usedStreamIdCounter.set(streamId)
-
-      // _ <- IO
-      //  .raiseError(ErrorGen(streamId, Error.PROTOCOL_ERROR, "Sends a HEADERS frame on previously closed(used) stream"))
-      //  .whenA(streamId <= usedId)
-
       nS <- ZIO.attempt(concurrentStreams.get)
       _ <- ZIO.logDebug(s"Open stream: $streamId  total = ${streamTbl.size} active = ${nS}")
 
@@ -593,9 +577,9 @@ class Http2Connection[Env](
       _ <-
         if (INITIAL_WINDOW_SIZE > 65535L) sendFrame(Frames.mkWindowUpdateFrame(streamId, INITIAL_WINDOW_SIZE - 65535))
         else ZIO.unit
-      _ <- ZIO
-        .logDebug(s"Send UPDATE WINDOW, streamId = $streamId: ${INITIAL_WINDOW_SIZE - 65535}")
-        .when(INITIAL_WINDOW_SIZE > 65535L)
+      _ <- ZIO.when(INITIAL_WINDOW_SIZE > 65535L)(
+        ZIO.logDebug(s"Send UPDATE WINDOW, streamId = $streamId: ${INITIAL_WINDOW_SIZE - 65535}")
+      )
 
       updSyncQ <- Queue.dropping[Unit](1)
       pendingInBytes <- Ref.make(0)
@@ -649,21 +633,20 @@ class Http2Connection[Env](
       o <- ZIO.attempt(streamTbl.get(streamId)) // if already in the table, we process trailing headers.
       trailing <- o match {
         case Some(e) =>
-          ZIO
-            .fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "A second HEADERS frame without the END_STREAM flag"))
-            .when(e.endFlag == false && e.endHeadersFlag == false) *>
-            ZIO
-              .fail(
+          ZIO.when(e.endFlag == false && e.endHeadersFlag == false)(
+            ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "A second HEADERS frame without the END_STREAM flag"))
+          ) *>
+            ZIO.when(e.endFlag == true && e.endHeadersFlag == false)(
+              ZIO.fail(
                 ErrorGen(
                   streamId,
                   Error.PROTOCOL_ERROR,
                   "A second (trailing?) HEADERS frame without the END_HEADER flag"
                 )
               )
-              .when(e.endFlag == true && e.endHeadersFlag == false) *>
-            ZIO
-              .fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "A second HEADERS frame on closed stream"))
-              .when(e.endFlag == true && e.endHeadersFlag == true) *> ZIO.succeed(true)
+            ) *> ZIO.when(e.endFlag == true && e.endHeadersFlag == true)(
+              ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "A second HEADERS frame on closed stream"))
+            ) *> ZIO.succeed(true)
         case None => ZIO.succeed(false)
       }
     } yield (trailing)
@@ -672,7 +655,7 @@ class Http2Connection[Env](
   private[this] def doStreamHeaders(streamId: Int, flags: Int): ZIO[Env, Throwable, Boolean] = {
     for {
       trailing <- checkForTrailingHeaders(streamId, flags)
-      _ <- openStream(streamId, flags).when(trailing == false)
+      _ <- ZIO.when(trailing == false)(openStream(streamId, flags))
     } yield (trailing)
   }
 
@@ -693,7 +676,7 @@ class Http2Connection[Env](
   private[this] def accumData(streamId: Int, bb: ByteBuffer, dataSize: Int): Task[Unit] = {
     for {
       o_c <- ZIO.attempt(this.streamTbl.get(streamId))
-      _ <- ZIO.fail(ErrorGen(streamId, Error.FRAME_SIZE_ERROR, "invalid stream id")).when(o_c.isEmpty)
+      _ <- ZIO.when(o_c.isEmpty)(ZIO.fail(ErrorGen(streamId, Error.FRAME_SIZE_ERROR, "invalid stream id")))
       c <- ZIO.attempt(o_c.get)
       _ <- ZIO.succeed(c.contentLenFromDataFrames += dataSize)
 
@@ -760,18 +743,17 @@ class Http2Connection[Env](
         for {
           _ <- ZIO.succeed { c.endFlag = true }
           contentLenFromHeader <- c.contentLenFromHeader.await
-          _ <- ZIO
-            .fail(
+          _ <- ZIO.when(contentLenFromHeader.isDefined && c.contentLenFromDataFrames != contentLenFromHeader.get)(
+            ZIO.fail(
               ErrorGen(
                 streamId,
                 Error.PROTOCOL_ERROR,
                 "HEADERS frame with the content-length header field which does not equal the DATA frame payload length"
               )
             )
-            .when(contentLenFromHeader.isDefined && c.contentLenFromDataFrames != contentLenFromHeader.get)
-
+          )
         } yield ()
-    ).catchAll( e => ZIO.logError( s"markEndOfStream():  Stream $streamId closed already"))
+    ).catchAll(e => ZIO.logError(s"markEndOfStream():  Stream $streamId closed already"))
 
   private[this] def haveHeadersEnded(streamId: Int): Task[Boolean] = {
     for {
@@ -870,7 +852,6 @@ class Http2Connection[Env](
 
   def sendFrame(b: => ByteBuffer) = outq.offer(b)
 
-
   ////////////////////////////////////////////
 
   def route2(streamId: Int, request: Request): ZIO[Env, Throwable, Unit] = {
@@ -879,25 +860,25 @@ class Http2Connection[Env](
       _ <- ZIO.logDebug(s"Processing request for stream = $streamId ${request.method.name} ${request.path} ")
       _ <- ZIO.logDebug("request.headers: " + request.headers.printHeaders(" | "))
 
-      _ <- ZIO
-        .fail(ErrorGen(streamId, Error.COMPRESSION_ERROR, "empty headers: COMPRESSION_ERROR"))
-        .when(request.headers.tbl.size == 0)
+      _ <- ZIO.when(request.headers.tbl.size == 0)(
+        ZIO.fail(ErrorGen(streamId, Error.COMPRESSION_ERROR, "empty headers: COMPRESSION_ERROR"))
+      )
 
-      _ <- ZIO
-        .fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "Upercase letters in the header keys"))
-        .when(request.headers.ensureLowerCase == false)
+      _ <- ZIO.when(request.headers.ensureLowerCase == false)(
+        ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "Upercase letters in the header keys"))
+      )
 
-      _ <- ZIO
-        .fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "Invalid pseudo-header field"))
-        .when(request.headers.validatePseudoHeaders == false)
+      _ <- ZIO.when(request.headers.validatePseudoHeaders == false)(
+        ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "Invalid pseudo-header field"))
+      )
 
-      _ <- ZIO
-        .fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "Connection-specific header field forbidden"))
-        .when(request.headers.get("connection").isDefined == true)
+      _ <- ZIO.when(request.headers.get("connection").isDefined == true)(
+        ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "Connection-specific header field forbidden"))
+      )
 
-      _ <- ZIO
-        .fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "TE header field with any value other than trailers"))
-        .when(request.headers.get("te").isDefined && request.headers.get("te").get != "trailers")
+      _ <- ZIO.when(request.headers.get("te").isDefined && request.headers.get("te").get != "trailers")(
+        ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "TE header field with any value other than trailers"))
+      )
 
       response_o <- (httpRoute(request)).catchAll {
         case e: java.io.FileNotFoundException =>
@@ -937,11 +918,12 @@ class Http2Connection[Env](
                   .foreach { chunk =>
                     for {
                       chunk0 <- pref.get
-                      _ <- ZIO
-                        .foreach(dataFrame(streamId, false, ByteBuffer.wrap(chunk0.toArray)))(b =>
+                      _ <- ZIO.when(chunk0.nonEmpty)(
+                        ZIO.foreach(dataFrame(streamId, false, ByteBuffer.wrap(chunk0.toArray)))(b =>
                           sendDataFrame(streamId, b)
                         )
-                        .when(chunk0.nonEmpty)
+                      )
+
                       _ <- pref.set(chunk)
                     } yield ()
                   }
@@ -949,11 +931,13 @@ class Http2Connection[Env](
 
             lastChunk <- pref.get
             _ <- (ZIO
-              .foreach(dataFrame(streamId, true, ByteBuffer.wrap(lastChunk.toArray)))(b => sendDataFrame(streamId, b)))
-              .when(endStreamInHeaders == false)
-              .unit
+              .when(endStreamInHeaders == false)(
+                ZIO.foreach(dataFrame(streamId, true, ByteBuffer.wrap(lastChunk.toArray)))(b =>
+                  sendDataFrame(streamId, b)
+                )
+              ))
 
-            _ <- updateStreamWith(10, streamId, c => c.done.succeed(()).unit).when(endStreamInHeaders == true)
+            _ <- ZIO.when(endStreamInHeaders == true)(updateStreamWith(10, streamId, c => c.done.succeed(()).unit))
 
           } yield ()
 
@@ -979,19 +963,13 @@ class Http2Connection[Env](
     } yield ()
 
     T
-
-    // IO(T).bracket( c => c )(_ => closeStream(streamId))
   }
 
   def closeStream(streamId: Int): Task[Unit] = {
     for {
-      _ <- updateStreamWith(12, streamId, c => c.done.await).when(Http2Connection.FAST_MODE == false)
+      _ <- ZIO.when(Http2Connection.FAST_MODE == false)(updateStreamWith(12, streamId, c => c.done.await))
       _ <- ZIO.succeed(concurrentStreams.decrementAndGet())
-      // keep last HTTP2_MAX_CONCURRENT_STREAMS in closed state.
-      // potentialy it's possible for client to reuse old streamId outside of that last MAX
-      // _ <- IO(streamTbl.remove(streamId - 2 * Http2Connection.HTTP2_MAX_CONCURRENT_STREAMS))
-      //  .whenA(streamId > 2 * Http2Connection.HTTP2_MAX_CONCURRENT_STREAMS)
-      // _ <- IO.sleep( 50.millis )
+
       _ <- ZIO.attempt(streamTbl.remove(streamId))
       _ <- ZIO.logDebug(s"Close stream: $streamId")
     } yield ()
@@ -1127,27 +1105,24 @@ class Http2Connection[Env](
             case FrameTypes.RST_STREAM =>
               val code: Long = buffer.getInt() & Masks.INT32 // java doesn't have unsigned integers
               for {
-                _ <- ZIO
-                  .fail(ErrorGen(streamId, Error.FRAME_SIZE_ERROR, "RST_STREAM: FRAME_SIZE_ERROR"))
-                  .when(len != 4)
+                _ <- ZIO.when(len != 4)(
+                  ZIO.fail(ErrorGen(streamId, Error.FRAME_SIZE_ERROR, "RST_STREAM: FRAME_SIZE_ERROR"))
+                )
+
                 o_s <- ZIO.attempt(this.streamTbl.get(streamId))
                 _ <- ZIO.logInfo(s"Reset Stream $streamId present=${o_s.isDefined} code=$code")
-                _ <- ZIO
-                  .fail(
+                _ <- ZIO.when(o_s.isEmpty)(
+                  ZIO.fail(
                     ErrorGen(
                       streamId,
                       Error.PROTOCOL_ERROR,
                       s"Reset Stream $streamId present=${o_s.isDefined} code=$code"
                     )
                   )
-                  .when(o_s.isEmpty)
+                )
 
                 _ <- markEndOfStream(streamId)
 
-                // _ <- updateStreamWith(100, streamId, c => c.done.complete(()).void).whenA(o_s.isDefined)
-                // _ <- closeStream(streamId).whenA(o_s.isDefined)
-                // just abort wait and go with norlmal close()
-                // _ <- updateStreamWith(78, streamId, c => c.done.complete(()).void).whenA(o_s.isDefined)
               } yield ()
 
             case FrameTypes.HEADERS =>
@@ -1174,34 +1149,37 @@ class Http2Connection[Env](
                 )
               else {
                 for {
-                  _ <- ZIO
-                    .fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "streamId is 0 for HEADER"))
-                    .when(streamId == 0)
-                  _ <- ZIO
-                    .fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, ""))
-                    .when(lastStreamId != 0 && lastStreamId > streamId)
+                  _ <- ZIO.when(streamId == 0)(
+                    ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "streamId is 0 for HEADER"))
+                  )
+
+                  _ <- ZIO.when(lastStreamId != 0 && lastStreamId > streamId)(
+                    ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, ""))
+                  )
+
                   _ <- ZIO.succeed { lastStreamId = streamId }
 
                   _ <- priority match {
                     case Some(t3) =>
-                      ZIO
-                        .fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "HEADERS frame depends on itself"))
-                        .when(t3._1 == streamId)
+                      ZIO.when(t3._1 == streamId)(
+                        ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "HEADERS frame depends on itself"))
+                      )
+
                     case None => ZIO.unit
                   }
 
                   // total <- IO(this.streamTbl.size)
                   total <- ZIO.attempt(this.concurrentStreams.get())
 
-                  _ <- ZIO
-                    .fail(
+                  _ <- ZIO.when(total >= settings.MAX_CONCURRENT_STREAMS)(
+                    ZIO.fail(
                       ErrorGen(
                         streamId,
                         Error.PROTOCOL_ERROR,
                         "MAX_CONCURRENT_STREAMS exceeded, with total streams = " + total
                       )
                     )
-                    .when(total >= settings.MAX_CONCURRENT_STREAMS)
+                  )
 
                   o_s <- ZIO.attempt(this.streamTbl.get(streamId))
                   _ <- o_s match {
@@ -1210,30 +1188,29 @@ class Http2Connection[Env](
                     case None => ZIO.unit
                   }
                   trailing <- doStreamHeaders(streamId, flags)
-                  _ <- ZIO.logDebug(s"trailing headers: $trailing").when(trailing == true)
+                  _ <- ZIO.when(trailing == true)(ZIO.logDebug(s"trailing headers: $trailing"))
                   // currently cannot do trailing without END_STREAM ( no continuation for trailing, seems this is stated in RFC, spec test requires it)
-                  _ <- ZIO
-                    .fail(
+                  _ <- ZIO.when(((flags & Flags.END_STREAM) == 0) && trailing)(
+                    ZIO.fail(
                       ErrorGen(streamId, Error.INTERNAL_ERROR, "Second HEADERS frame without the END_STREAM flag")
                     )
-                    .when(((flags & Flags.END_STREAM) == 0) && trailing)
+                  )
 
                   _ <- accumHeaders(streamId, buffer).when(trailing == false)
                   _ <- accumTrailingHeaders(streamId, buffer).when(trailing == true)
 
-                  _ <- markEndOfStream(streamId).when((flags & Flags.END_STREAM) != 0)
-                  _ <- markEndOfHeaders(streamId).when((flags & Flags.END_HEADERS) != 0)
+                  _ <- ZIO.when((flags & Flags.END_STREAM) != 0)(markEndOfStream(streamId))
+                  _ <- ZIO.when((flags & Flags.END_HEADERS) != 0)(markEndOfHeaders(streamId))
 
                   // if no body reset trailing headers to empty
-                  _ <- setEmptyTrailingHeaders(streamId).when(((flags & Flags.END_STREAM) != 0) && trailing == false)
+                  _ <- ZIO
+                    .when(((flags & Flags.END_STREAM) != 0) && trailing == false)(setEmptyTrailingHeaders(streamId))
 
-                  _ <- triggerStream(streamId).when(((flags & Flags.END_HEADERS) != 0) && (trailing == false))
+                  _ <- ZIO.when(((flags & Flags.END_HEADERS) != 0) && (trailing == false))(triggerStream(streamId))
 
                   _ <- finalizeTrailingHeaders(streamId).when((flags & Flags.END_HEADERS) != 0 && trailing == true)
 
-                  _ <- ZIO
-                    .succeed { headerStreamId = 0 }
-                    .when((flags & Flags.END_HEADERS) != 0) // ready to tak new stream
+                  _ <- ZIO.when((flags & Flags.END_HEADERS) != 0)(ZIO.succeed { headerStreamId = 0 })
 
                 } yield ()
               }
@@ -1243,10 +1220,10 @@ class Http2Connection[Env](
               for {
                 b1 <- haveHeadersEnded(streamId)
                 _ <- ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "END HEADERS")).when(b1)
-                _ <- markEndOfHeaders(streamId).when((flags & Flags.END_HEADERS) != 0)
-                _ <- markEndOfStream(streamId).when((flags & Flags.END_STREAM) != 0)
+                _ <- ZIO.when((flags & Flags.END_HEADERS) != 0)(markEndOfHeaders(streamId))
+                _ <- ZIO.when((flags & Flags.END_STREAM) != 0)(markEndOfStream(streamId))
                 _ <- accumHeaders(streamId, buffer)
-                _ <- triggerStream(streamId).when((flags & Flags.END_HEADERS) != 0)
+                _ <- ZIO.when((flags & Flags.END_HEADERS) != 0)(triggerStream(streamId))
 
               } yield ()
 
@@ -1265,20 +1242,20 @@ class Http2Connection[Env](
 
                 t1: Long <- ZIO.succeed(packet.size.toLong - padLen - Constants.HeaderSize - padByte)
                 t2: Long <- ZIO.succeed(len.toLong - padByte - padLen)
-                _ <- ZIO
-                  .fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "DATA frame with invalid pad length"))
-                  .when(t1 != t2)
+                _ <- ZIO.when(t1 != t2)(
+                  ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "DATA frame with invalid pad length"))
+                )
 
-                _ <- ZIO
-                  .fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "******CON or HEADERS nit finished"))
-                  .when(headersEnded == false)
+                _ <- ZIO.when(headersEnded == false)(
+                  ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "******CON or HEADERS nit finished"))
+                )
 
                 b <- hasEnded(streamId)
                 _ <- ZIO.fail(ErrorGen(streamId, Error.STREAM_CLOSED, "STREAM_CLOSED")).when(b)
                 // streams ends with data, no trailing headers for sure, reset to empty
-                _ <- setEmptyTrailingHeaders(streamId).when(((flags & Flags.END_STREAM) != 0))
+                _ <- ZIO.when(((flags & Flags.END_STREAM) != 0))(setEmptyTrailingHeaders(streamId))
                 _ <- accumData(streamId, packet0, len)
-                _ <- markEndOfStreamWithData(streamId).when((flags & Flags.END_STREAM) != 0)
+                _ <- ZIO.when((flags & Flags.END_STREAM) != 0)(markEndOfStreamWithData(streamId))
               } yield ()
 
             case FrameTypes.WINDOW_UPDATE => {
@@ -1297,31 +1274,31 @@ class Http2Connection[Env](
               buffer.get(data)
               if ((flags & Flags.ACK) == 0) {
                 for {
-                  _ <- ZIO
-                    .fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "Ping streamId not 0"))
-                    .when(streamId != 0)
+                  _ <- ZIO.when(streamId != 0)(
+                    ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "Ping streamId not 0"))
+                  )
+
                   _ <- sendFrame(Frames.mkPingFrame(ack = true, data))
                 } yield ()
               } else ZIO.unit // else if (this.start)
 
             case FrameTypes.GOAWAY =>
-              ZIO
-                .fail(
+              ZIO.when(streamId != 0)(
+                ZIO.fail(
                   ErrorGen(streamId, Error.PROTOCOL_ERROR, "GOAWAY frame with a stream identifier other than 0x0")
                 )
-                .when(streamId != 0) *>
-                ZIO
-                  .attempt {
-                    val lastStream = Flags.DepID(buffer.getInt())
-                    val code: Long =
-                      buffer.getInt() & Masks.INT32 // java doesn't have unsigned integers
-                    val data = new Array[Byte](buffer.remaining)
-                    buffer.get(data)
-                    data
-                  }
-                  .flatMap(data =>
-                    ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "GOAWAY frame received " + new String(data)))
-                  )
+              ) *> ZIO
+                .attempt {
+                  val lastStream = Flags.DepID(buffer.getInt())
+                  val code: Long =
+                    buffer.getInt() & Masks.INT32 // java doesn't have unsigned integers
+                  val data = new Array[Byte](buffer.remaining)
+                  buffer.get(data)
+                  data
+                }
+                .flatMap(data =>
+                  ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "GOAWAY frame received " + new String(data)))
+                )
 
             case FrameTypes.PRIORITY =>
               val rawInt = buffer.getInt();
@@ -1331,26 +1308,30 @@ class Http2Connection[Env](
 
               for {
                 _ <- ZIO.logDebug("PRIORITY frane received")
-                _ <- ZIO
-                  .fail(
+                _ <- ZIO.when(headerStreamId != 0)(
+                  ZIO.fail(
                     ErrorGen(
                       streamId,
                       Error.PROTOCOL_ERROR,
                       "PRIORITY frame to another stream while sending the headers blocks"
                     )
                   )
-                  .when(headerStreamId != 0)
-                _ <- ZIO
-                  .fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "PRIORITY frame with 0x0 stream identifier"))
-                  .when(streamId == 0)
-                _ <- ZIO
-                  .fail(
+                )
+
+                _ <- ZIO.when(streamId == 0)(
+                  ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "PRIORITY frame with 0x0 stream identifier"))
+                )
+
+                _ <- ZIO.when(len != 5)(
+                  ZIO.fail(
                     ErrorGen(streamId, Error.FRAME_SIZE_ERROR, "PRIORITY frame with a length other than 5 octets")
                   )
-                  .when(len != 5)
-                _ <- ZIO
-                  .fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "PRIORITY frame depends on itself"))
-                  .when(streamId == dependentId)
+                )
+
+                _ <- ZIO.when(streamId == dependentId)(
+                  ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "PRIORITY frame depends on itself"))
+                )
+
               } yield ()
 
             /* When the value of SETTINGS_INITIAL_WINDOW_SIZE changes, a receiver MUST adjust
@@ -1363,25 +1344,25 @@ class Http2Connection[Env](
 
             case FrameTypes.SETTINGS =>
               (for {
-                _ <- ZIO
-                  .fail(
+                _ <- ZIO.when(len % 6 != 0)(
+                  ZIO.fail(
                     ErrorGen(
                       streamId,
                       Error.PROTOCOL_ERROR,
                       "ends a SETTINGS frame with a length other than a multiple of 6 octets"
                     )
                   )
-                  .when(len % 6 != 0)
+                )
 
-                _ <- ZIO
-                  .fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "SETTINGS frame with ACK flag and payload"))
-                  .when(len > 0 && Flags.ACK(flags))
+                _ <- ZIO.when(len > 0 && Flags.ACK(flags))(
+                  ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "SETTINGS frame with ACK flag and payload"))
+                )
 
-                _ <- ZIO
-                  .fail(
+                _ <- ZIO.when(streamId != 0)(
+                  ZIO.fail(
                     ErrorGen(streamId, Error.PROTOCOL_ERROR, "SETTINGS frame with a stream identifier other than 0x0")
                   )
-                  .when(streamId != 0)
+                )
 
                 _ <-
                   if (Flags.ACK(flags) == false) {
@@ -1390,45 +1371,45 @@ class Http2Connection[Env](
                         sendFrame(Frames.mkPingFrame(ack = true, Array.fill[Byte](8)(0x0)))
                       }
 
-                      _ <- ZIO
-                        .fail(
+                      _ <- ZIO.when(settings_done == true && res.MAX_FRAME_SIZE < settings_client.MAX_FRAME_SIZE)(
+                        ZIO.fail(
                           ErrorGen(
                             streamId,
                             Error.PROTOCOL_ERROR,
                             "SETTINGS_MAX_FRAME_SIZE (0x5): Sends the value below the initial value"
                           )
                         )
-                        .when(settings_done == true && res.MAX_FRAME_SIZE < settings_client.MAX_FRAME_SIZE)
+                      )
 
-                      _ <- ZIO
-                        .fail(
+                      _ <- ZIO.when(res.MAX_FRAME_SIZE > 0xffffff)(
+                        ZIO.fail(
                           ErrorGen(
                             streamId,
                             Error.PROTOCOL_ERROR,
                             "SETTINGS_MAX_FRAME_SIZE (0x5): Sends the value above the maximum allowed frame size"
                           )
                         )
-                        .when(res.MAX_FRAME_SIZE > 0xffffff)
+                      )
 
-                      _ <- ZIO
-                        .fail(
+                      _ <- ZIO.when(res.ENABLE_PUSH != 1 && res.ENABLE_PUSH != 0)(
+                        ZIO.fail(
                           ErrorGen(
                             streamId,
                             Error.PROTOCOL_ERROR,
                             "SETTINGS_ENABLE_PUSH (0x2): Sends the value other than 0 or 1"
                           )
                         )
-                        .when(res.ENABLE_PUSH != 1 && res.ENABLE_PUSH != 0)
+                      )
 
-                      _ <- ZIO
-                        .fail(
+                      _ <- ZIO.when((res.INITIAL_WINDOW_SIZE & Masks.INT32) > Integer.MAX_VALUE)(
+                        ZIO.fail(
                           ErrorGen(
                             streamId,
                             Error.FLOW_CONTROL_ERROR,
                             "SETTINGS_INITIAL_WINDOW_SIZE (0x4): Sends the value above the maximum flow control window size"
                           )
                         )
-                        .when((res.INITIAL_WINDOW_SIZE & Masks.INT32) > Integer.MAX_VALUE)
+                      )
 
                       ws <- ZIO.succeed(this.settings_client.INITIAL_WINDOW_SIZE)
                       _ <- ZIO.attempt(Http2Settings.copy(this.settings_client, res))
@@ -1440,7 +1421,9 @@ class Http2Connection[Env](
                       _ <- ZIO.logDebug(s"Remote INITIAL_WINDOW_SIZE ${this.settings_client.INITIAL_WINDOW_SIZE}")
                       _ <- ZIO.logDebug(s"Server INITIAL_WINDOW_SIZE ${this.settings.INITIAL_WINDOW_SIZE}")
 
-                      _ <- sendFrame(Frames.makeSettingsFrame(ack = false, this.settings)).when(settings_done == false)
+                      _ <- ZIO.when(settings_done == false)(
+                        sendFrame(Frames.makeSettingsFrame(ack = false, this.settings))
+                      )
                       _ <- sendFrame(Frames.makeSettingsAckFrame())
 
                       // re-adjust inbound window if exceeds default
@@ -1449,9 +1432,9 @@ class Http2Connection[Env](
                         if (INITIAL_WINDOW_SIZE > 65535) {
                           sendFrame(Frames.mkWindowUpdateFrame(streamId, INITIAL_WINDOW_SIZE - 65535))
                         } else ZIO.unit
-                      _ <- ZIO
-                        .logDebug(s"Send UPDATE WINDOW global: ${INITIAL_WINDOW_SIZE - 65535}")
-                        .when(INITIAL_WINDOW_SIZE > 65535L)
+                      _ <- ZIO.when(INITIAL_WINDOW_SIZE > 65535L)(
+                        ZIO.logDebug(s"Send UPDATE WINDOW global: ${INITIAL_WINDOW_SIZE - 65535}")
+                      )
 
                       _ <- ZIO.succeed {
                         if (settings_done == false) settings_done = true
@@ -1459,7 +1442,7 @@ class Http2Connection[Env](
 
                     } yield ()
                   } else
-                    (ZIO.attempt { start = false } *> http11request.get.flatMap {
+                    ZIO.when(start)(ZIO.attempt { start = false } *> http11request.get.flatMap {
                       case Some(x) => {
                         val stream = x.stream
                         val th = x.trailingHeaders
@@ -1467,7 +1450,7 @@ class Http2Connection[Env](
                         this.openStream11(1, Request(id, 1, h, stream, th))
                       }
                       case None => ZIO.unit
-                    }).when(start)
+                    })
 
               } yield ()).catchAll {
                 case _: scala.MatchError => ZIO.logDebug("Settings match error") *> ZIO.unit
@@ -1475,16 +1458,15 @@ class Http2Connection[Env](
               }
             case _ =>
               for {
-                _ <- ZIO
-                  .fail(
+                _ <- ZIO.when(headerStreamId != 0)(
+                  ZIO.fail(
                     ErrorGen(
                       streamId,
                       Error.PROTOCOL_ERROR,
                       "Sends an unknown extension frame in the middle of a header block"
                     )
                   )
-                  .when(headerStreamId != 0)
-
+                )
               } yield ()
 
           }
