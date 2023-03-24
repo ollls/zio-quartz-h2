@@ -330,7 +330,8 @@ class QuartzH2Server(
   def errorHandler(e: Throwable) = {
     e match {
       case BadProtocol(ch, e) =>
-        ch.write(ByteBuffer.wrap(responseStringNo11().getBytes)) *> ZIO.logError(
+        ch.write(Frames.mkGoAwayFrame(0, Error.PROTOCOL_ERROR, e.getBytes))
+        /*ch.write(ByteBuffer.wrap(responseStringNo11().getBytes))*/ *> ZIO.logError(
           e.toString
         )
       case e: java.nio.channels.InterruptedByTimeoutException =>

@@ -753,7 +753,7 @@ class Http2Connection[Env](
             )
           )
         } yield ()
-    ).catchAll(e => ZIO.logError(s"markEndOfStream():  Stream $streamId closed already"))
+    )//.catchAll(e => ZIO.logError(s"markEndOfStream():  Stream $streamId closed already"))
 
   private[this] def haveHeadersEnded(streamId: Int): Task[Boolean] = {
     for {
