@@ -972,7 +972,8 @@ class Http2Connection[Env](
       _ <- ZIO.when(Http2Connection.FAST_MODE == false)(updateStreamWith(12, streamId, c => c.done.await))
       _ <- ZIO.succeed(concurrentStreams.decrementAndGet())
 
-      _ <- ZIO.sleep(zio.Duration.fromMillis(700)).map(_ => streamTbl.remove(streamId)).fork
+      //_ <- ZIO.sleep(zio.Duration.fromMillis(700)).map(_ => streamTbl.remove(streamId)).fork
+      _ <- ZIO.attempt(streamTbl.remove(streamId))
       _ <- ZIO.logDebug(s"Close stream: $streamId")
     } yield ()
 
