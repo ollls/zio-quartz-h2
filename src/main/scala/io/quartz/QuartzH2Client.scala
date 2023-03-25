@@ -107,6 +107,20 @@ object QuartzH2Client {
 
       ch <- TCPChannel.connect(host, port, socketGroup)
       tls_ch <- ZIO.attempt(new TLSChannel(ctx, ch)).tap(c => c.ssl_initClent_h2())
+
+      alpn_tag <- ZIO.attempt(tls_ch.f_SSL.engine.getApplicationProtocol())
+      _ <- ZIO.logTrace(s"Server ALPN: $alpn_tag")
+      opt <- ZIO.when(alpn_tag == "h2")(ZIO.logDebug("ALPN, server accepted to use h2"))
+      _ <- opt match {
+        case None =>
+          ZIO.fail(
+            new Exception(
+              s"ALPN, failure to negotiate h2 protocol, ALPN protocols tags were not present or not recognized"
+            )
+          )
+        case _ => ZIO.unit
+      }
+
     } yield (tls_ch)
     T
   }
