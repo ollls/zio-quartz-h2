@@ -56,7 +56,6 @@ case class HeaderSizeLimitExceeded(msg: String) extends Exception(msg)
 case class BadProtocol(ch: IOChannel, msg: String) extends Exception(msg)
 
 object QuartzH2Server {
-  var DELAY_BEFORE_STREAM_DISCARDED_MS = 700
   def buildSSLContext(
       protocol: String,
       JKSkeystore: String,

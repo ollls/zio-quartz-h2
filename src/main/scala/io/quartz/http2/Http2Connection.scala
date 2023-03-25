@@ -961,7 +961,6 @@ class Http2Connection[Env](
       }
       // no impact wait, response already sent, http/2 connection kept open, stream half-closed.
       // just to make sure you won't get streamId not found due to a race between server and client
-      _ <- ZIO.sleep(zio.Duration.fromMillis(io.quartz.QuartzH2Server.DELAY_BEFORE_STREAM_DISCARDED_MS))
       _ <- closeStream(streamId)
     } yield ()
 
@@ -973,7 +972,7 @@ class Http2Connection[Env](
       _ <- ZIO.when(Http2Connection.FAST_MODE == false)(updateStreamWith(12, streamId, c => c.done.await))
       _ <- ZIO.succeed(concurrentStreams.decrementAndGet())
 
-      _ <- ZIO.attempt(streamTbl.remove(streamId))
+      _ <- ZIO.sleep(zio.Duration.fromMillis(700)).map(_ => streamTbl.remove(streamId)).fork
       _ <- ZIO.logDebug(s"Close stream: $streamId")
     } yield ()
 
