@@ -104,11 +104,12 @@ object QuartzH2Client {
         if (socketGroup == null) AsynchronousSocketChannel.open()
         else AsynchronousSocketChannel.open(socketGroup)
       )
-      _ <- ZIO.logDebug( s"Connecting: $host")
+      _ <- ZIO.logDebug(s"Connecting: $host")
       ch <- TCPChannel.connect(host, port, socketGroup)
       tls_ch <- ZIO.attempt(new TLSChannel(ctx, ch)).tap(c => c.ssl_initClent_h2())
 
-      alpn_tag <- ZIO.attempt(tls_ch.f_SSL.engine.getApplicationProtocol())
+      alpn_tag0 <- ZIO.attempt(tls_ch.f_SSL.engine.getApplicationProtocol())
+      alpn_tag <- ZIO.succeed(if (alpn_tag0 == null) "not selected or empty" else alpn_tag0)
       _ <- ZIO.logTrace(s"Server ALPN: $alpn_tag")
       opt <- ZIO.when(alpn_tag == "h2")(ZIO.logDebug("ALPN, server accepted to use h2"))
       _ <- opt match {
