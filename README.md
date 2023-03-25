@@ -14,9 +14,7 @@ https://github.com/ollls/zio-quartz-demo
 * 0.2.1 template project with use cases, `sbt run`:<br>https://github.com/ollls/zio-qh2-examples
 * Use cases:<br> https://github.com/ollls/zio-quartz-h2/blob/master/examples/IO/src/main/scala/Run.scala, to run: `sbt IO/run`
 * To debug: switch to "debug" or 'trace" in logback-test.xml
-* To access from browser: https://127.0.0.1:8443/IMG_0278.jpeg. ( read log messages and make sure your local file path is OK, also edit path in example/Run scala  )
 * You may look at the quartz-h2 CATS port https://github.com/ollls/quartz-h2
-
 * Standard support for ZIO Environment.
 
 ```scala
