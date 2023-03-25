@@ -65,10 +65,10 @@ object MyApp extends ZIOAppDefault {
 
     //automatic multi-part upload, file names preserved  
     case req @ POST -> Root / "mpart" =>
-      MultiPart.writeAll(req, "/Users/user000/tmp1/") *> ZIO.succeed(Response.Ok())
+      MultiPart.writeAll(req, "/Users/user000/") *> ZIO.succeed(Response.Ok())
 
     case req @ POST -> Root / "upload" / StringVar(file) =>
-      val FOLDER_PATH = "/Users/user000/web_root/"
+      val FOLDER_PATH = "/Users/user00/web_root/"
       val FILE = s"$file"
       for {
         jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
@@ -76,7 +76,9 @@ object MyApp extends ZIOAppDefault {
       } yield (Response.Ok().asText("OK"))
 
     // best path for h2spec
-    case GET -> Root => ZIO.attempt(Response.Ok().asText("OK"))
+    case req @ GET -> Root => for {
+     x <- req.stream.runCount
+    } yield( Response.Ok().asText( s"OK bytes received: $x") )
 
     case req @ POST -> Root =>
       for {
@@ -84,7 +86,9 @@ object MyApp extends ZIOAppDefault {
       } yield (Response.Ok().asText("OK:" + String(u.toArray)))
 
     // perf tests
-    case GET -> Root / "test" => ZIO.attempt(Response.Ok())
+    case req @ GET -> Root / "test2" => ZIO.debug( s"connection id = ${req.connId}/${req.streamId}") *> ZIO.attempt(Response.Ok())
+
+    case req @ GET -> Root / "test" => ZIO.attempt(Response.Ok())
 
     case GET -> Root / "example" =>
       // how to send data in separate H2 packets of various size.
@@ -104,13 +108,20 @@ object MyApp extends ZIOAppDefault {
         .asStream(ZStream.fromFile(jpath, BLOCK_SIZE))
         .contentType(ContentType.contentTypeFromFileName(FILE)))
 
-  
+  def onConnect( id: Long) = {
+    ZIO.logTrace( s"connected - $id")
+  }
+
+   def onDisconnect( id: Long) = {
+    ZIO.logTrace( s"disconnected - $id")
+  }
 
   def run =
     val env = ZLayer.fromZIO(ZIO.succeed("Hello ZIO World!"))
     (for {
       ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
-      exitCode <- new QuartzH2Server("localhost", 8443, 16000, ctx).startIO(R, filter, sync = false)
+      exitCode <- new QuartzH2Server("localhost", 8443, 16000, ctx, /*2097152*/
+      onConnect = onConnect, onDisconnect = onDisconnect).startIO(R, filter, sync = false)
 
     } yield (exitCode)).provideSomeLayer(env)
 
