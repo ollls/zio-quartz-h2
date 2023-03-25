@@ -9,11 +9,10 @@ ZIO2 native, 100% asyncronous. Java NIO based implementation of http/2 packet st
 ``` 
 libraryDependencies += "io.github.ollls" %% "zio-quartz-h2" % "0.2.1"
 ```
-* 0.4.3 template example: client/server (quartz-h2 HTTP/2 client only supports TLS with ALPN H2 HTTP/2 hosts)<br>
+* 0.4.3 template example: client/server (quartz-h2 HTTP/2 client only supports TLS with ALPN H2 HTTP/2 hosts), `sbt run`<br>
 https://github.com/ollls/zio-quartz-demo
-* 0.2.1 template project with use cases:<br>https://github.com/ollls/zio-qh2-examples
-* Use cases:<br> https://github.com/ollls/zio-quartz-h2/blob/master/examples/IO/src/main/scala/Run.scala
-* To run:  sbt IO/run
+* 0.2.1 template project with use cases, `sbt run`:<br>https://github.com/ollls/zio-qh2-examples
+* Use cases:<br> https://github.com/ollls/zio-quartz-h2/blob/master/examples/IO/src/main/scala/Run.scala, to run: `sbt IO/run`
 * To debug: switch to "debug" or 'trace" in logback-test.xml
 * To access from browser: https://127.0.0.1:8443/IMG_0278.jpeg. ( read log messages and make sure your local file path is OK, also edit path in example/Run scala  )
 * You may look at the quartz-h2 CATS port https://github.com/ollls/quartz-h2
