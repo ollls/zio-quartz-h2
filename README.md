@@ -2,8 +2,10 @@
 
 [![Generic badge](https://img.shields.io/badge/zio--quartz--h2-0.2.1-blue)](https://repo1.maven.org/maven2/io/github/ollls/zio-quartz-h2_3/0.2.1)
 
-Easy template example: client/server (quartz-h2 HTTP/2 client only supports TLS with ALPN H2 HTTP/2 hosts)
+* Easy template example: client/server (quartz-h2 HTTP/2 client only supports TLS with ALPN H2 HTTP/2 hosts)<br>
 https://github.com/ollls/zio-quartz-demo
+
+* template project with use cases:<br>https://github.com/ollls/zio-qh2-examples
 
 # Asyncronous Java NIO **http/2 TLS** packet streaming server/client.
 
@@ -14,7 +16,6 @@ libraryDependencies += "io.github.ollls" %% "zio-quartz-h2" % "0.2.1"
 ```
 
 * Use cases:<br> https://github.com/ollls/zio-quartz-h2/blob/master/examples/IO/src/main/scala/Run.scala
-* template project with use cases:<br>  https://github.com/ollls/zio-qh2-examples
 * To run:  sbt IO/run
 * To debug: switch to "debug" or 'trace" in logback-test.xml
 * To access from browser: https://127.0.0.1:8443/IMG_0278.jpeg. ( read log messages and make sure your local file path is OK, also edit path in example/Run scala  )
