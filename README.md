@@ -2,10 +2,10 @@
 
 [![Generic badge](https://img.shields.io/badge/zio--quartz--h2-0.2.1-blue)](https://repo1.maven.org/maven2/io/github/ollls/zio-quartz-h2_3/0.2.1)
 
-* Easy template example: client/server (quartz-h2 HTTP/2 client only supports TLS with ALPN H2 HTTP/2 hosts)<br>
+* 0.4.3 template example: client/server (quartz-h2 HTTP/2 client only supports TLS with ALPN H2 HTTP/2 hosts)<br>
 https://github.com/ollls/zio-quartz-demo
 
-* Another template project with use cases:<br>https://github.com/ollls/zio-qh2-examples
+* 0.2.1 template project with use cases:<br>https://github.com/ollls/zio-qh2-examples
 
 # Asyncronous Java NIO **http/2 TLS** packet streaming server/client.
 
