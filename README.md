@@ -5,7 +5,7 @@
 * Easy template example: client/server (quartz-h2 HTTP/2 client only supports TLS with ALPN H2 HTTP/2 hosts)<br>
 https://github.com/ollls/zio-quartz-demo
 
-* template project with use cases:<br>https://github.com/ollls/zio-qh2-examples
+* Another template project with use cases:<br>https://github.com/ollls/zio-qh2-examples
 
 # Asyncronous Java NIO **http/2 TLS** packet streaming server/client.
 
