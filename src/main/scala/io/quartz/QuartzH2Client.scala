@@ -104,7 +104,7 @@ object QuartzH2Client {
         if (socketGroup == null) AsynchronousSocketChannel.open()
         else AsynchronousSocketChannel.open(socketGroup)
       )
-
+      _ <- ZIO.logDebug( s"Connecting: $host")
       ch <- TCPChannel.connect(host, port, socketGroup)
       tls_ch <- ZIO.attempt(new TLSChannel(ctx, ch)).tap(c => c.ssl_initClent_h2())
 
