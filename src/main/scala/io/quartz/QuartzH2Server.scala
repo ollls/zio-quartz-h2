@@ -103,14 +103,14 @@ object QuartzH2Server {
   * @param onDisconnect
   *   callback function that is called when a connection is terminated, provides connectionId : Long as an argument
   */
-class QuartzH2Server(
+class QuartzH2Server[Env](
     HOST: String,
     PORT: Int,
     h2IdleTimeOutMs: Int,
     sslCtx: SSLContext,
     incomingWinSize: Int = 65535,
-    onConnect: Long => Task[Unit] = _ => ZIO.unit,
-    onDisconnect: Long => UIO[Unit] = _ => ZIO.unit
+    onConnect: Long => ZIO[Env, Throwable, Unit] = _ => ZIO.unit,
+    onDisconnect: Long => ZIO[Env, Nothing, Unit] = _ => ZIO.unit
 ) {
 
   // def this(HOST: String) = this(HOST, 8080, 20000, null)
@@ -236,7 +236,7 @@ class QuartzH2Server(
     (hdrs, cur)
   }
 
-  def doConnect[Env](
+  def doConnect(
       ch: IOChannel,
       idRef: Ref[Long],
       maxStreams: Int,
@@ -271,7 +271,7 @@ class QuartzH2Server(
 
   }
 
-  def doConnectUpgrade[Env](
+  def doConnectUpgrade(
       ch: IOChannel,
       id: Long,
       maxStreams: Int,
@@ -346,15 +346,15 @@ class QuartzH2Server(
     ia.getHostString()
   }
 
-  def startIO[Env](
+  def startIO(
       pf: HttpRouteIO[Env],
       filter: WebFilter = (r0: Request) => ZIO.succeed(None),
       sync: Boolean
   ): ZIO[Env, Throwable, ExitCode] = {
-    start[Env](Routes.of[Env](pf, filter), sync)
+    start(Routes.of[Env](pf, filter), sync)
   }
 
-  def start[Env](R: HttpRoute[Env], sync: Boolean): ZIO[Env, Throwable, ExitCode] = {
+  def start(R: HttpRoute[Env], sync: Boolean): ZIO[Env, Throwable, ExitCode] = {
 
     val cores = Runtime.getRuntime().availableProcessors()
     val h2streams = cores * 2 // optimal setting tested with h2load
@@ -392,7 +392,7 @@ class QuartzH2Server(
     }
   }
 
-  def run0[Env](
+  def run0(
       e: ExecutorService,
       R: HttpRoute[Env],
       maxThreadNum: Int,
@@ -446,7 +446,7 @@ class QuartzH2Server(
     } yield (ExitCode.success)
   }
 
-  def run1[Env](
+  def run1(
       R: HttpRoute[Env],
       maxThreadNum: Int,
       maxStreams: Int,
@@ -495,7 +495,7 @@ class QuartzH2Server(
     } yield (ExitCode.success)
   }
 
-  def run3[Env](
+  def run3(
       e: ExecutorService,
       R: HttpRoute[Env],
       maxThreadNum: Int,
