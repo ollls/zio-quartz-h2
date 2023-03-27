@@ -7,7 +7,7 @@
 ZIO2 native, asyncronous, Java NIO based implementation of http/2 packet streaming server with TLS encryption implemented as scala ZIO2 effect with ALPN h2 tag. Direct native translation of ZIO ZStream chunks into http2 packets (inbound and outbound). Tested and optimized to produce highest possible TPS.
 
 ``` 
-libraryDependencies += "io.github.ollls" %% "zio-quartz-h2" % "0.2.1"
+libraryDependencies += "io.github.ollls" %% "zio-quartz-h2" % "0.4.3"
 ```
 * 0.4.3 template example: client/server (quartz-h2 HTTP/2 client only supports TLS with ALPN H2 HTTP/2 hosts), `sbt run`<br>
 https://github.com/ollls/zio-quartz-demo
