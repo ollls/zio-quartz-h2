@@ -1,17 +1,20 @@
-[![Generic badge](https://img.shields.io/badge/zio--quartz--h2-0.2.1-blue)](https://repo1.maven.org/maven2/io/github/ollls/zio-quartz-h2_3/0.2.1)
+<img src="quartz-h2.jpeg" width="84" title="quartz-h2"/>
+
+[![Generic badge](https://img.shields.io/badge/zio--quartz--h2-0.4.3-blue)](https://repo1.maven.org/maven2/io/github/ollls/zio-quartz-h2_3/0.4.3)
+
+# Asyncronous Java NIO **http/2 TLS** packet streaming server/client.
+
+ZIO2 native, asyncronous, Java NIO based implementation of http/2 packet streaming server with TLS encryption implemented as scala ZIO2 effect with ALPN h2 tag. Direct native translation of ZIO ZStream chunks into http2 packets (inbound and outbound). Tested and optimized to produce highest possible TPS.
 
 ``` 
-libraryDependencies += "io.github.ollls" %% "zio-quartz-h2" % "0.2.1"
+libraryDependencies += "io.github.ollls" %% "zio-quartz-h2" % "0.4.3"
 ```
-ZIO2 native, 100% asyncronous Java NIO based implementation of http/2 packet streaming server with TLS encryption implemented as scala ZIO2 effect. Direct native translation of ZIO ZStream chunks into http2 packets (inbound and outbound).
-
-* Use cases:<br> https://github.com/ollls/zio-quartz-h2/blob/master/examples/IO/src/main/scala/Run.scala
-* template project with use cases:<br>  https://github.com/ollls/zio-qh2-examples
-* To run:  sbt IO/run
+* 0.4.3 template example: client/server (quartz-h2 HTTP/2 client only supports TLS with ALPN H2 HTTP/2 hosts), `sbt run`<br>
+https://github.com/ollls/zio-quartz-demo
+* Template project with use cases, `sbt run`:<br>https://github.com/ollls/zio-qh2-examples
+* Use cases:<br> https://github.com/ollls/zio-quartz-h2/blob/master/examples/IO/src/main/scala/Run.scala, to run: `sbt IO/run`
 * To debug: switch to "debug" or 'trace" in logback-test.xml
-* To access from browser: https://127.0.0.1:8443/IMG_0278.jpeg. ( read log messages and make sure your local file path is OK, also edit path in example/Run scala  )
 * You may look at the quartz-h2 CATS port https://github.com/ollls/quartz-h2
-
 * Standard support for ZIO Environment.
 
 ```scala
