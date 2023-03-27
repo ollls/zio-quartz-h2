@@ -1,6 +1,6 @@
 <img src="quartz-h2.jpeg" width="84" title="quartz-h2"/>
 
-[![Generic badge](https://img.shields.io/badge/zio--quartz--h2-0.2.1-blue)](https://repo1.maven.org/maven2/io/github/ollls/zio-quartz-h2_3/0.2.1)
+[![Generic badge](https://img.shields.io/badge/zio--quartz--h2-0.4.3-blue)](https://repo1.maven.org/maven2/io/github/ollls/zio-quartz-h2_3/0.4.3)
 
 # Asyncronous Java NIO **http/2 TLS** packet streaming server/client.
 
