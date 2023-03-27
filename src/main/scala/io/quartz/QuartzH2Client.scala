@@ -163,7 +163,7 @@ object QuartzH2Client {
       ctx: SSLContext,
       incomingWindowSize: Int = 65535,
       socketGroup: AsynchronousChannelGroup = null
-  ): Task[Http2ClientConnection] = for {
+  ): Task[Http2ClientConnection] = (for {
     u <- ZIO.attempt(new URI(hostURI))
     io_ch <- QuartzH2Client.connect(
       u,
@@ -171,6 +171,5 @@ object QuartzH2Client {
     )
     c_h <- Http2ClientConnection.make(io_ch, u, timeOutMs, incomingWindowSize)
     settings <- c_h.H2_ClientConnect()
-  } yield (c_h)
-
+  } yield (c_h)).catchAll(e => ZIO.logError(s"Client: $hostURI ${e.toString}") *> ZIO.fail(e))
 }
