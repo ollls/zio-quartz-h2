@@ -706,7 +706,6 @@ class Http2Connection[Env](
         for {
           // close data stream, which is stuck without END_STREAM due to addion of trailing header.
           _ <- c.inDataQ.offer(Frames.mkDataFrame(streamId, true, 0, ByteBuffer.allocate(0)))
-          // http_headers <- ZIO.succeed(headerDecoder.decodeHeaders(c.trailing_header.toSeq))
           _ <- c.trailingHeader.succeed(headerDecoder.decodeHeaders(c.trailing_header.toSeq))
         } yield ()
     )
@@ -722,7 +721,6 @@ class Http2Connection[Env](
       streamId,
       c =>
         for {
-          // headers <- ZIO.succeed(headerDecoder.decodeHeaders(c.header.toSeq))
           _ <- c.d.succeed(headerDecoder.decodeHeaders(c.header.toSeq)).unit
         } yield ()
     )
@@ -813,9 +811,6 @@ class Http2Connection[Env](
           (for {
             rlen <- ZIO.succeed(Math.min(bytesCredit, data_len))
             frames <- ZIO.attempt(splitDataFrames(bb, rlen))
-
-            // _ <- outDataQEventQ.offer(false) >> stream.outDataQ.offer(frames._1.buffer)
-
             _ <-
               if (Http2Connection.FAST_MODE == true) sendFrame(frames._1.buffer)
               else stream.outDataQ.offer(frames._1.buffer) *> outDataQEventQ.offer(false)
