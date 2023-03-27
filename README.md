@@ -11,7 +11,7 @@ libraryDependencies += "io.github.ollls" %% "zio-quartz-h2" % "0.2.1"
 ```
 * 0.4.3 template example: client/server (quartz-h2 HTTP/2 client only supports TLS with ALPN H2 HTTP/2 hosts), `sbt run`<br>
 https://github.com/ollls/zio-quartz-demo
-* 0.2.1 template project with use cases, `sbt run`:<br>https://github.com/ollls/zio-qh2-examples
+* Template project with use cases, `sbt run`:<br>https://github.com/ollls/zio-qh2-examples
 * Use cases:<br> https://github.com/ollls/zio-quartz-h2/blob/master/examples/IO/src/main/scala/Run.scala, to run: `sbt IO/run`
 * To debug: switch to "debug" or 'trace" in logback-test.xml
 * You may look at the quartz-h2 CATS port https://github.com/ollls/quartz-h2
