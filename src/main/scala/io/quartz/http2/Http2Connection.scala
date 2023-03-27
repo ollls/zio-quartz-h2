@@ -64,8 +64,8 @@ object Http2Connection {
       http11Req_ref <- Ref.make[Option[Request]](http11request)
       hSem <- Semaphore.make(permits = 1)
 
-      globalTransmitWindow <- Ref.make[Long](65535) // (default_server_settings.INITIAL_WINDOW_SIZE)
-      globalInboundWindow <- Ref.make(65535) // (default_server_settings.INITIAL_WINDOW_SIZE)
+      globalTransmitWindow <- Ref.make[Long](65535)
+      globalInboundWindow <- Ref.make(65535)
 
       globalBytesOfPendingInboundData <- Ref.make(0)
 
@@ -1026,9 +1026,8 @@ class Http2Connection[Env](
     * If the compressed representation of the headers exceeds the MAX_FRAME_SIZE setting of the peer, it will be broken
     * into a HEADERS frame and a series of CONTINUATION frames.
     */
-  // BROKEN TODO TODO!!!
   //////////////////////////////
-  def headerFrame( // TODOD pbly not working for multi-packs
+  def headerFrame(
       streamId: Int,
       priority: Priority,
       endStream: Boolean,
@@ -1068,14 +1067,12 @@ class Http2Connection[Env](
       Http2Connection
         .makePacketStream(ch, HTTP2_KEEP_ALIVE_MS, leftOver)
         .foreach(packet => { packet_handler(httpReq11, packet) })
-    // .compile
-    // .drain
   }.catchAll {
     case e @ ErrorGen(streamId, code, name) =>
       ZIO.logError(s"Http2Connnection.processIncoming() ${e.code} ${name}") *>
         sendFrame(Frames.mkGoAwayFrame(streamId, code, name.getBytes)).unit
     case e @ _ => {
-      ZIO.logError(e.toString()) // >> */IO.raiseError(e)
+      ZIO.logError(e.toString())
     }
   }
 
