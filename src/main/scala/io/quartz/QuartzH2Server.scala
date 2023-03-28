@@ -2,10 +2,7 @@ package io.quartz
 
 import zio.{ZIO, UIO, Task, Chunk, Promise, Ref, ExitCode, ZIOApp}
 import zio.stream.ZStream
-
-import io.quartz.http2.Http2Connection
 import io.quartz.netio._
-
 import java.net.InetSocketAddress
 import java.net.SocketAddress
 import java.nio.channels.Channel
@@ -245,6 +242,7 @@ class QuartzH2Server[Env](
       leftOver: Chunk[Byte] = Chunk.empty[Byte]
   ): ZIO[Env, Throwable, Unit] = {
     for {
+      _ <- ZIO.debug(">doConnect()")
       id <- idRef.get
       buf <-
         if (leftOver.size > 0) ZIO.succeed(leftOver) else ch.read(HTTP1_KEEP_ALIVE_MS)
@@ -306,8 +304,15 @@ class QuartzH2Server[Env](
             ch.read(
               HTTP1_KEEP_ALIVE_MS
             ) // clent preface and remote peer/client setting array  !!!!FIX NEDED
-        } else
+        } else {
+          ///////////////////////////////////////////////////////////////////////
+          // This is the place where we can implement fallback to http1.1 chunked.
+          // we need to call make() onConnect()/onDisconnect() and processIncomin() for htttp1.1 chunked emulator
+          // same route, h2 pseudo headers will be translated to http1 format.
+          // we emulate http2 on http1.1 chunked- app space client won't see the difference.
+          ////////////////////////////////////////////////////////////////////////
           ZIO.fail(new BadProtocol(ch, "HTTP2 Upgrade Request Denied"))
+        }
       bbuf <- ZIO.attempt(ByteBuffer.wrap(clientPreface.toArray))
       isOK <- ZIO.attempt(Frames.checkPreface(bbuf))
       c <-
