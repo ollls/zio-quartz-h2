@@ -77,7 +77,7 @@ case GET -> Root / StringVar(file) =>
       } yield (Response.Ok().asText("OK"))
         
 ```        
-* HTTP Multipart file retrieval.
+* HTTP Multipart file upload.
 
 ```scala
 
