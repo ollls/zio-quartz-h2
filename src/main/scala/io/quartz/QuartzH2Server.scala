@@ -276,60 +276,58 @@ class QuartzH2Server[Env](
       keepAliveMs: Int,
       route: HttpRoute[Env],
       buf: Chunk[Byte]
-  ): ZIO[Env, Throwable, Unit] = {
-    val R = for {
-      _ <- ZIO.logTrace("doConnectUpgrade()")
-      hb <- ZIO.attempt(getHttpHeaderAndLeftover(buf))
-      leftover = hb._2
-      headers11 = hb._1
-      contentLen = headers11.get("Content-Length").getOrElse("0").toLong
+  ): ZIO[Env, Throwable, Unit] = for {
+    _ <- ZIO.logTrace("doConnectUpgrade()")
+    hb <- ZIO.attempt(getHttpHeaderAndLeftover(buf))
+    leftover = hb._2
+    headers11 = hb._1
+    contentLen = headers11.get("Content-Length").getOrElse("0").toLong
 
-      s1 <- ZIO.attempt(
-        ZStream[Chunk[Byte]](leftover).flatMap(c0 => ZStream.fromChunk(c0))
-      )
-      s2 <- ZIO.attempt(
-        ZStream.repeatZIO(ch.read(HTTP1_KEEP_ALIVE_MS)).flatMap(c0 => ZStream.fromChunk(c0))
-      )
-      res <- ZIO.attempt((s1 ++ s2).take(contentLen))
+    s1 <- ZIO.attempt(
+      ZStream[Chunk[Byte]](leftover).flatMap(c0 => ZStream.fromChunk(c0))
+    )
+    s2 <- ZIO.attempt(
+      ZStream.repeatZIO(ch.read(HTTP1_KEEP_ALIVE_MS)).flatMap(c0 => ZStream.fromChunk(c0))
+    )
+    res <- ZIO.attempt((s1 ++ s2).take(contentLen))
 
-      emptyTH <- Promise.make[Throwable, Headers] // no trailing headers for 1.1
-      _ <- emptyTH.succeed(Headers()) // complete with empty
-      http11request <- ZIO.attempt(Some(Request(id, 1, headers11, res, emptyTH)))
-      upd = headers11.get("upgrade").getOrElse("")
-      _ <- ZIO.logTrace("doConnectUpgrade() - Upgrade = " + upd)
-      clientPreface <-
-        if (upd == "h2c") {
-          ZIO.logTrace("doConnectUpgrade() - h2c upgrade requested") *>
-            ch.write(ByteBuffer.wrap(protoSwitch().getBytes)) *>
-            ch.read(
-              HTTP1_KEEP_ALIVE_MS
-            ) // clent preface and remote peer/client setting array  !!!!FIX NEDED
-        } else {
-          ///////////////////////////////////////////////////////////////////////
-          // This is the place where we can implement fallback to http1.1 chunked.
-          // we need to call make() onConnect()/onDisconnect() and processIncomin() for htttp1.1 chunked emulator
-          // same route, h2 pseudo headers will be translated to http1 format.
-          // we emulate http2 on http1.1 chunked- app space client won't see the difference.
-          ////////////////////////////////////////////////////////////////////////
-          ZIO.fail(new BadProtocol(ch, "HTTP2 Upgrade Request Denied"))
+    emptyTH <- Promise.make[Throwable, Headers] // no trailing headers for 1.1
+    _ <- emptyTH.succeed(Headers()) // complete with empty
+    http11request <- ZIO.attempt(Some(Request(id, 1, headers11, res, emptyTH)))
+    upd = headers11.get("upgrade").getOrElse("")
+    _ <- ZIO.logTrace("doConnectUpgrade() - Upgrade = " + upd)
+    _ <-
+      if (upd != "h2c") for {
+        c <- Http11Connection.make(ch, id)
+        _ <- ZIO.scoped {
+          ZIO
+            .acquireRelease(ZIO.succeed(c))(c => onDisconnect(c.id) *> c.shutdown.catchAll(_ => ZIO.unit))
+            .tap(c => onConnect(c.id))
+            .flatMap(_.processIncoming(headers11, leftover))
         }
-      bbuf <- ZIO.attempt(ByteBuffer.wrap(clientPreface.toArray))
-      isOK <- ZIO.attempt(Frames.checkPreface(bbuf))
-      c <-
-        if (isOK) Http2Connection.make(ch, id, maxStreams, keepAliveMs, route, incomingWinSize, http11request)
-        else
-          ZIO.fail(
-            new BadProtocol(ch, "Cannot see HTTP2 Preface, bad protocol")
-          )
-      _ <- ZIO.scoped {
-        ZIO
-          .acquireRelease(ZIO.succeed(c))(c => onDisconnect(c.id) *> c.shutdown.catchAll(_ => ZIO.unit))
-          .tap(c => onConnect(c.id))
-          .flatMap(_.processIncoming(clientPreface.drop(PrefaceString.length)))
-      }
-    } yield ()
-    R
-  }
+        // _ <- ZIO.fail(new BadProtocol(ch, "HTTP2 Upgrade Request Denied"))
+      } yield ()
+      else
+        for {
+          _ <- ZIO.logTrace("doConnectUpgrade() - h2c upgrade requested")
+          _ <- ch.write(ByteBuffer.wrap(protoSwitch().getBytes))
+          clientPreface <- ch.read(HTTP1_KEEP_ALIVE_MS)
+          bbuf <- ZIO.attempt(ByteBuffer.wrap(clientPreface.toArray))
+          isOK <- ZIO.attempt(Frames.checkPreface(bbuf))
+          c <-
+            if (isOK) Http2Connection.make(ch, id, maxStreams, keepAliveMs, route, incomingWinSize, http11request)
+            else
+              ZIO.fail(
+                new BadProtocol(ch, "Cannot see HTTP2 Preface, bad protocol")
+              )
+          _ <- ZIO.scoped {
+            ZIO
+              .acquireRelease(ZIO.succeed(c))(c => onDisconnect(c.id) *> c.shutdown.catchAll(_ => ZIO.unit))
+              .tap(c => onConnect(c.id))
+              .flatMap(_.processIncoming(clientPreface.drop(PrefaceString.length)))
+          }
+        } yield ()
+  } yield ()
 
   ///////////////////////////////////
   def errorHandler(e: Throwable) = {
