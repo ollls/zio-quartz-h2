@@ -5,7 +5,7 @@
 # Asyncronous Java NIO **http/2 TLS** packet streaming server/client.
 
 ZIO2 native, asyncronous, Java NIO based implementation of http/2 packet streaming server with TLS encryption implemented as scala ZIO2 effect with ALPN h2 tag. Direct native translation of ZIO ZStream chunks into http2 packets (inbound and outbound). Tested and optimized to produce highest possible TPS. Server supports http multipart with ZStream and automatic saving of files for file based multi parts.
-```scala
+```
 MultiPart.stream(req: Request): ZIO[Any, Throwable, ZStream[Any, Throwable, Headers | Chunk[Byte]]] 
 MultiPart.writeAll(req: Request, folderPath: String): Task[Unit]
 ```
