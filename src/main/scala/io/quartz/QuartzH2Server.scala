@@ -149,13 +149,13 @@ class QuartzH2Server[Env](
       })
   )
 
-  private def parseHeaderLine(line: String, hdrs: Headers): Headers =
+  private def parseHeaderLine(line: String, hdrs: Headers, secure: Boolean): Headers =
     line match {
       case http_line(method, path, _) =>
         hdrs ++ Headers(
           ":method" -> method,
           ":path" -> path,
-          ":scheme" -> "http"
+          ":scheme" -> (if (secure) "https" else "http")
         ) // FIX TBD - no schema for now, ":scheme" -> prot)
       case header_pair(attr, value) => hdrs + (attr.toLowerCase -> value)
       case _                        => hdrs
@@ -203,10 +203,9 @@ class QuartzH2Server[Env](
     r ++= CRLF
 
     r.toString()
-
   }
 
-  def getHttpHeaderAndLeftover(chunk: Chunk[Byte]): (Headers, Chunk[Byte]) = {
+  def getHttpHeaderAndLeftover(chunk: Chunk[Byte], secure: Boolean): (Headers, Chunk[Byte]) = {
     var cur = chunk
     var stop = false
     var complete = false
@@ -218,7 +217,7 @@ class QuartzH2Server[Env](
         stop = true
       } else {
         val line = cur.take(i)
-        hdrs = parseHeaderLine(new String(line.toArray), hdrs)
+        hdrs = parseHeaderLine(new String(line.toArray), hdrs, secure)
         cur = cur.drop(i + 2)
         if (line.size == 0) {
           complete = true;
@@ -278,7 +277,7 @@ class QuartzH2Server[Env](
       buf: Chunk[Byte]
   ): ZIO[Env, Throwable, Unit] = for {
     _ <- ZIO.logTrace("doConnectUpgrade()")
-    hb <- ZIO.attempt(getHttpHeaderAndLeftover(buf))
+    hb <- ZIO.attempt(getHttpHeaderAndLeftover(buf, ch.secure))
     leftover = hb._2
     headers11 = hb._1
     contentLen = headers11.get("Content-Length").getOrElse("0").toLong

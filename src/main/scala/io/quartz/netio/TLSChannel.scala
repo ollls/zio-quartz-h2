@@ -362,8 +362,7 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
     result.catchAll(_ => ZIO.unit)
   }
 
- /**
-    * Client side ssl init.
+  /** Client side ssl init.
     */
   def ssl_initClient(): Task[Unit] = {
     for {
@@ -377,8 +376,7 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
 
   }
 
-  /**
-    * Client side ssl init with http/2 alpn tag only.
+  /** Client side ssl init with http/2 alpn tag only.
     */
   def ssl_initClent_h2(): Task[Unit] = {
     for {
@@ -400,12 +398,12 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
   // returns leftover chunk which needs to be used before we read chanel again.
   // for 99% there will be no leftover but under extreme load or upon JVM init it happens
 
-  //FYI from document on setHandshakeApplicationProtocolSelector()
-  //The function's result is an application protocol name, or null to indicate that none of the advertised names are acceptable. 
-  //If the return value is an empty String then application protocol indications will not be used. 
-  //If the return value is null (no value chosen) or is a value that was not advertised by the peer, 
-  //the underlying protocol will determine what action to take. 
-  //(For example, ALPN will send a "no_application_protocol" alert and terminate the connection.)
+  // FYI from document on setHandshakeApplicationProtocolSelector()
+  // The function's result is an application protocol name, or null to indicate that none of the advertised names are acceptable.
+  // If the return value is an empty String then application protocol indications will not be used.
+  // If the return value is null (no value chosen) or is a value that was not advertised by the peer,
+  // the underlying protocol will determine what action to take.
+  // (For example, ALPN will send a "no_application_protocol" alert and terminate the connection.)
 
   def ssl_init(): Task[Chunk[Byte]] = {
     for {
@@ -433,7 +431,7 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
       _ <- f_SSL.setUseClientMode(false)
       _ <- ZIO.attempt(f_SSL.engine.setHandshakeApplicationProtocolSelector((eng, list) => {
         if (list.asScala.find(_ == "h2").isDefined) "h2"
-        else "" //application protocol indications will not be used
+        else "" // application protocol indications will not be used
       }))
 
       x <- doHandshake()
@@ -511,4 +509,6 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
   }
 
   def remoteAddress(): Task[SocketAddress] = ZIO.attempt(rch.ch.getRemoteAddress())
+
+  def secure = true
 }
