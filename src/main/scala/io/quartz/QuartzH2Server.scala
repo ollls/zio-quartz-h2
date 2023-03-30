@@ -297,12 +297,13 @@ class QuartzH2Server[Env](
     _ <- ZIO.logTrace("doConnectUpgrade() - Upgrade = " + upd)
     _ <-
       if (upd != "h2c") for {
-        c <- Http11Connection.make(ch, id)
+        c <- Http11Connection.make(ch, id, keepAliveMs, route)
+        refStart <- Ref.make(true)
         _ <- ZIO.scoped {
           ZIO
             .acquireRelease(ZIO.succeed(c))(c => onDisconnect(c.id) *> c.shutdown.catchAll(_ => ZIO.unit))
             .tap(c => onConnect(c.id))
-            .flatMap(_.processIncoming(headers11, leftover))
+            .flatMap(_.processIncoming(headers11, leftover, refStart).forever)
         }
         // _ <- ZIO.fail(new BadProtocol(ch, "HTTP2 Upgrade Request Denied"))
       } yield ()

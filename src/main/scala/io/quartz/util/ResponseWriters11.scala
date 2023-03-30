@@ -97,6 +97,27 @@ object ResponseWriters11 {
     result.refineToOrDie[Exception]
   }
 
+  /////////////////////////////////////////////////////////////////////////////
+  def writeFullResponseFromStream(
+      c: IOChannel,
+      rs: Response
+  ) = {
+    val code = rs.code
+    val stream = rs.stream.chunks
+    val header = ZStream(genResponseChunked(rs, code, false)).map(str => Chunk.fromArray(str.getBytes()))
+
+    val s0 = stream.map(c => (c.size.toHexString -> c.appended[Byte](('\r')).appended[Byte]('\n')))
+    val s1 = s0.map(c => (Chunk.fromArray((c._1 + CRLF).getBytes()) ++ c._2))
+    val zs = ZStream(Chunk.fromArray(("0".toString + CRLF + CRLF).getBytes))
+    val res = header ++ s1 ++ zs
+
+    res.foreach { chunk0 =>
+      {
+        c.write(ByteBuffer.wrap(chunk0.toArray))
+      }
+    }
+  }
+
   ///////////////////////////////////////////////////////////////////////
   private def getContentResponse(resp: Response, code: StatusCode, contLen: Int, close: Boolean): String = {
     val dfmt = new java.text.SimpleDateFormat("EEE, d MMM yyyy HH:mm:ss")
