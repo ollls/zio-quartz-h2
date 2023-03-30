@@ -10,12 +10,16 @@ import io.quartz.http2.routes.HttpRoute
 import zio.{ZIO, Task, Chunk, Promise, Ref}
 import zio.stream.ZStream
 
+//TODO streamID increment, while keepalive
+//TODO headertranslation 11 -> 2, 2 -> 11
+//TODO better fallback loggging
+
 object Http11Connection {
 
   val MAX_ALLOWED_CONTENT_LEN = 1048576 * 100 // 104 MB
 
   def make[Env](ch: IOChannel, id: Long, keepAliveMs: Int, httpRoute: HttpRoute[Env]) = for {
-    _ <- ZIO.succeed(ch.timeOutMs( keepAliveMs))
+    _ <- ZIO.succeed(ch.timeOutMs(keepAliveMs))
     c <- ZIO.attempt(new Http11Connection(ch, id, httpRoute))
   } yield (c)
 }
@@ -34,6 +38,18 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, httpRoute: HttpRoute[En
     })
 
     new Headers(map)
+  }
+
+  def translateHeadersFrom2to11(headers: Headers): Headers = {
+      val map = headers.tbl.map((k, v) => {
+      val k1 = k.toLowerCase() match {
+        case ":authority"    => "host"
+        case k: String => k
+      }
+      (k1, v)
+    })
+    new Headers(map)
+
   }
 
   private[this] def testWithStatePos(byte: Byte, pattern: Array[Byte], statusPos: Int): Int = {
@@ -81,19 +97,13 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, httpRoute: HttpRoute[En
 
     for {
       start <- refStart.get
-
-      v <- if ( start ) ZIO.attempt((headers0, leftOver)) else splitHeadersAndBody(ch, Chunk.empty[Byte])
+      v <- if (start) ZIO.attempt((headers0, leftOver)) else splitHeadersAndBody(ch, Chunk.empty[Byte])
       header_bytes = v._1
-      leftover     = v._2
+      leftover = v._2
 
       headers <- ZIO.attempt(translateHeadersFrom11to2(headers0))
 
-       _ <- refStart.set(false)
-
-      _ <- ZIO.debug("*************************************************")
-      _ <- ZIO.debug(headers.printHeaders)
-      _ <- ZIO.debug(s"leftover size = " + leftOver)
-      _ <- ZIO.debug("*************************************************")
+      _ <- refStart.set(false)
 
       /* TODO VALIDATION ?*/
 
@@ -102,8 +112,7 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, httpRoute: HttpRoute[En
       isChunked <- ZIO.succeed(headers.getMval("transfer-encoding").exists(_.equalsIgnoreCase("chunked")))
       isContinue <- ZIO.succeed(headers.get("Expect").getOrElse("").equalsIgnoreCase("100-continue"))
       _ <- ZIO.when(isChunked && isContinue)(
-        ResponseWriters11
-          .writeNoBodyResponse(ch, StatusCode.Continue, "", false)
+        ResponseWriters11.writeNoBodyResponse(ch, StatusCode.Continue, false)
       )
 
       contentLen <- ZIO.succeed(headers.get("content-length").getOrElse("0"))
@@ -132,8 +141,8 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, httpRoute: HttpRoute[En
   }
 
   def route2(streamId: Int, request: Request): ZIO[Env, Throwable, Unit] = for {
-    _ <- ZIO.logDebug(
-      s"HTTP/1.1 mode: Processing request for stream = $streamId ${request.method.name} ${request.path} "
+    _ <- ZIO.logTrace(
+      s"HTTP/1.1 streamId = $streamId ${request.method.name} ${request.path} "
     )
     _ <- ZIO.logDebug("request.headers: " + request.headers.printHeaders(" | "))
 
@@ -164,17 +173,21 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, httpRoute: HttpRoute[En
     }
 
     _ <- response_o match {
-      case Some(response) => ZIO.unit
-      case None           => sendNotFound
+      case Some(response) =>
+        for {
+          _ <- ResponseWriters11.writeFullResponseFromStreamChunked(
+            ch, response.hdr(("Transfer-Encoding" -> "chunked"))
+          )
+          _ <- ZIO.logDebug(
+            s"HTTP/1.1 chunked streamId = $streamId ${request.method.name} ${request.path} ${response.code.toString()}"
+          )
+        } yield ()
+      case None =>
+        ZIO.logDebug(
+          s"HTTP/1.1 streamId = $streamId ${request.method.name} ${request.path} ${StatusCode.NotFound.toString()}"
+        ) *> ResponseWriters11.writeNoBodyResponse(ch, StatusCode.NotFound, false)
     }
 
   } yield ()
 
-  private[this] def sendNotFound = for {
-    _ <- ZIO.debug("")
-    o44 <- ZIO.succeed(Response.Error(StatusCode.NotFound).hdr(("Transfer-Encoding" -> "chunked")))
-    _ <- ZIO.logTrace("response.headers: " + o44.headers.printHeaders(" | "))
-    _ <- ZIO.logDebug(s"Send response code: ${o44.code.toString()}")
-    _ <- ResponseWriters11.writeFullResponseFromStream(ch, o44)
-  } yield ()
 }

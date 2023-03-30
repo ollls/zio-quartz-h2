@@ -15,41 +15,23 @@ import zio.ZIO.attemptBlocking
 
 object ResponseWriters11 {
 
-  final val TAG = "zio-nio-tls-http"
+  // final val TAG = "zio-nio-tls-http"
 
   final val CRLF = "\r\n"
 
-////////////////////////////////////////////////////////////////////////////
-  def writeNoBodyResponse(
-      c: IOChannel,
-      code: StatusCode,
-      msg: String,
-      close: Boolean
-  ): Task[Int] =
-    c.write(ByteBuffer.wrap(genResponse(code, msg, close).getBytes()))
-
-  def writeFullResponseBytes(
-      c: IOChannel,
-      rs: Response,
-      code: StatusCode,
-      data: Chunk[Byte],
-      close: Boolean
-  ): Task[Int] = // ZIO[Any, Exception, Int] =
-    for {
-      n <- ZIO.succeed(data.size)
-      _ <- c.write(ByteBuffer.wrap(getContentResponse(rs, code, n, false).getBytes()))
-      _ <- c.write(ByteBuffer.wrap(data.toArray))
-    } yield (n)
+  def writeNoBodyResponse(ch: IOChannel, code: StatusCode, close: Boolean) = {
+    val response = Response(code, Headers(), ZStream.empty);
+    writeFullResponse(ch, response, "", close)
+  }
 
   ////////////////////////////////////////////////////////////////////////////
   def writeFullResponse(
       c: IOChannel,
       rs: Response,
-      code: StatusCode,
       msg: String,
       close: Boolean
   ): Task[Int] =
-    c.write(ByteBuffer.wrap(genResponseFromResponse(rs, code, msg, close).getBytes()))
+    c.write(ByteBuffer.wrap(genResponseFromResponse(rs, msg, close).getBytes()))
 
   def writeResponseMethodNotAllowed(c: IOChannel, allow: String): Task[Int] =
     c.write(ByteBuffer.wrap(genResponseMethodNotAllowed(allow).getBytes()))
@@ -98,14 +80,14 @@ object ResponseWriters11 {
   }
 
   /////////////////////////////////////////////////////////////////////////////
-  def writeFullResponseFromStream(
+  def writeFullResponseFromStreamChunked(
       c: IOChannel,
       rs: Response
   ) = {
     val code = rs.code
     val stream = rs.stream.chunks
-    val header = ZStream(genResponseChunked(rs, code, false)).map(str => Chunk.fromArray(str.getBytes()))
 
+    val header = ZStream(genResponseChunked(rs, code, false)).map(str => Chunk.fromArray(str.getBytes()))
     val s0 = stream.map(c => (c.size.toHexString -> c.appended[Byte](('\r')).appended[Byte]('\n')))
     val s1 = s0.map(c => (Chunk.fromArray((c._1 + CRLF).getBytes()) ++ c._2))
     val zs = ZStream(Chunk.fromArray(("0".toString + CRLF + CRLF).getBytes))
@@ -119,38 +101,17 @@ object ResponseWriters11 {
   }
 
   ///////////////////////////////////////////////////////////////////////
-  private def getContentResponse(resp: Response, code: StatusCode, contLen: Int, close: Boolean): String = {
-    val dfmt = new java.text.SimpleDateFormat("EEE, d MMM yyyy HH:mm:ss")
-    dfmt.setTimeZone(java.util.TimeZone.getTimeZone("GMT"))
-    val r = new StringBuilder
-
-    r ++= "HTTP/1.1 " + code.value.toString + CRLF
-    r ++= "Date: " + dfmt.format(new java.util.Date()) + " GMT" + CRLF
-    r ++= "Server: " + TAG + CRLF
-    r ++= "Content-Length: " + contLen.toString() + CRLF
-
-    resp.headers.foreach { case (key, value) => r ++= key + ": " + value + CRLF }
-
-    if (close)
-      r ++= "Connection: close" + CRLF
-    else
-      r ++= "Connection: keep-alive" + CRLF
-    r ++= CRLF
-
-    r.toString()
-  }
-
-  ///////////////////////////////////////////////////////////////////////
-  private def genResponseFromResponse(resp: Response, code: StatusCode, msg: String, close: Boolean): String = {
+  private def genResponseFromResponse(resp: Response, msg: String, close: Boolean): String = {
     val dfmt = new java.text.SimpleDateFormat("EEE, d MMM yyyy HH:mm:ss")
 
     dfmt.setTimeZone(java.util.TimeZone.getTimeZone("GMT"))
 
     val r = new StringBuilder
+    val code = resp.code
 
     r ++= "HTTP/1.1 " + code.value.toString + CRLF
     r ++= "Date: " + dfmt.format(new java.util.Date()) + " GMT" + CRLF
-    r ++= "Server: " + TAG + CRLF
+    // r ++= "Server: " + TAG + CRLF
     r ++= "Content-Length: " + msg.length + CRLF
 
     resp.headers.foreach { case (key, value) => r ++= key + ": " + value + CRLF }
@@ -176,8 +137,11 @@ object ResponseWriters11 {
 
     r ++= "HTTP/1.1 " + code.value.toString + CRLF
     r ++= "Date: " + dfmt.format(new java.util.Date()) + " GMT" + CRLF
-    r ++= "Server: " + TAG + CRLF
-    resp.headers.foreach { case (key, value) => r ++= key + ": " + value + CRLF }
+    // r ++= "Server: " + TAG + CRLF
+    resp.headers.foreach { case (key, value) =>
+      r ++= key + ": " + value + CRLF
+    }
+
     if (close)
       r ++= "Connection: close" + CRLF
     else
@@ -197,7 +161,7 @@ object ResponseWriters11 {
 
     r ++= "HTTP/1.1 " + code.value.toString + CRLF
     r ++= "Date: " + dfmt.format(new java.util.Date()) + " GMT" + CRLF
-    r ++= "Server: " + TAG + CRLF
+    // r ++= "Server: " + TAG + CRLF
     r ++= "Content-Length: " + msg.length + CRLF
     if (close)
       r ++= "Connection: close" + CRLF
@@ -220,7 +184,7 @@ object ResponseWriters11 {
 
     r ++= "HTTP/1.1 415 Unsupported Media Type" + CRLF
     r ++= "Date: " + dfmt.format(new java.util.Date()) + " GMT" + CRLF
-    r ++= "Server: " + TAG + CRLF
+    // r ++= "Server: " + TAG + CRLF
     r ++= "Content-Length: 0" + CRLF
     r ++= "Connection: keep-alive" + CRLF
     r ++= CRLF
@@ -241,7 +205,7 @@ object ResponseWriters11 {
     r ++= "Location: " + location + CRLF
     r ++= "Cache-Control: no-cache, no-store, must-revalidate" + CRLF
     r ++= "Date: " + dfmt.format(new java.util.Date()) + " GMT" + CRLF
-    r ++= "Server: " + TAG + CRLF
+    // r ++= "Server: " + TAG + CRLF
     r ++= "Content-Length: 0" + CRLF
     r ++= "Connection: keep-alive" + CRLF
     r ++= CRLF
@@ -261,7 +225,7 @@ object ResponseWriters11 {
 
     r ++= "HTTP/1.1 405 Method not allowed" + CRLF
     r ++= "Date: " + dfmt.format(new java.util.Date()) + " GMT" + CRLF
-    r ++= "Server: " + TAG + CRLF
+    // r ++= "Server: " + TAG + CRLF
     r ++= "Allow: " + allow + CRLF
     r ++= "Content-Length: 0" + CRLF
     r ++= "Connection: keep-alive" + CRLF
@@ -283,7 +247,7 @@ object ResponseWriters11 {
 
     r ++= "HTTP/1.1 200 OK" + CRLF
     r ++= "Date: " + dfmt.format(new java.util.Date()) + " GMT" + CRLF
-    r ++= "Server: " + TAG + CRLF
+    // r ++= "Server: " + TAG + CRLF
     r ++= "Content-Type: " + cont_type + CRLF
     r ++= "Content-Length: " + file_size + CRLF
     r ++= "Connection: keep-alive" + CRLF

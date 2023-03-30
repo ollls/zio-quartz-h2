@@ -241,7 +241,6 @@ class QuartzH2Server[Env](
       leftOver: Chunk[Byte] = Chunk.empty[Byte]
   ): ZIO[Env, Throwable, Unit] = {
     for {
-      _ <- ZIO.debug(">doConnect()")
       id <- idRef.get
       buf <-
         if (leftOver.size > 0) ZIO.succeed(leftOver) else ch.read(HTTP1_KEEP_ALIVE_MS)

@@ -852,7 +852,7 @@ class Http2Connection[Env](
   def route2(streamId: Int, request: Request): ZIO[Env, Throwable, Unit] = {
 
     val T = for {
-      _ <- ZIO.logDebug(s"Processing request for stream = $streamId ${request.method.name} ${request.path} ")
+      _ <- ZIO.logDebug(s"H2 streamId = $streamId ${request.method.name} ${request.path} ")
       _ <- ZIO.logDebug("request.headers: " + request.headers.printHeaders(" | "))
 
       _ <- ZIO.when(request.headers.tbl.size == 0)(
