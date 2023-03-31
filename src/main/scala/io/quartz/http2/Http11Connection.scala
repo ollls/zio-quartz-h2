@@ -10,6 +10,7 @@ import io.quartz.http2.routes.HttpRoute
 import zio.{ZIO, Task, Chunk, Promise, Ref}
 import zio.stream.ZStream
 
+case class HeaderSizeLimitExceeded(msg: String) extends Exception(msg)
 object Http11Connection {
 
   val MAX_ALLOWED_CONTENT_LEN = 1048576 * 100 // 104 MB
@@ -22,6 +23,10 @@ object Http11Connection {
 }
 
 class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], httpRoute: HttpRoute[Env]) {
+
+  val header_pair = raw"(.{2,100}):\s+(.+)".r
+  val http_line = raw"([A-Z]{3,8})\s+(.+)\s+(HTTP/.+)".r
+
   def shutdown: Task[Unit] =
     ZIO.logInfo("Http11Connection.shutdown")
 
@@ -64,6 +69,45 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
 
   }
 
+  private def parseHeaderLine(line: String, hdrs: Headers, secure: Boolean): Headers =
+    line match {
+      case http_line(method, path, _) =>
+        hdrs ++ Headers(
+          ":method" -> method,
+          ":path" -> path,
+          ":scheme" -> (if (secure) "https" else "http")
+        ) // FIX TBD - no schema for now, ":scheme" -> prot)
+      case header_pair(attr, value) => hdrs + (attr.toLowerCase -> value)
+      case _                        => hdrs
+    }
+
+  private def getHttpHeaderAndLeftover(chunk: Chunk[Byte], secure: Boolean): Task[(Headers, Chunk[Byte])] =
+    ZIO.attempt {
+      var cur = chunk
+      var stop = false
+      var complete = false
+      var hdrs = Headers()
+
+      while (stop == false) {
+        val i = cur.indexWhere(_ == 0x0d)
+        if (i < 0) {
+          stop = true
+        } else {
+          val line = cur.take(i)
+          hdrs = parseHeaderLine(new String(line.toArray), hdrs, secure)
+          cur = cur.drop(i + 2)
+          if (line.size == 0) {
+            complete = true;
+            stop = true;
+          }
+        }
+      }
+      // won't use stream to fetch all headers, must be present at once in one bufer read ops.
+      if (complete == false)
+        ZIO.fail(new HeaderSizeLimitExceeded(""))
+      (hdrs, cur)
+    }
+
   private[this] def splitHeadersAndBody(c: IOChannel, chunk: Chunk[Byte]): Task[(Chunk[Byte], Chunk[Byte])] = {
     val split = chunkSearchFor2CR(chunk)
     if (split > 0) ZIO.attempt(chunk.splitAt(split))
@@ -75,19 +119,28 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
 
   }
 
-  def processIncoming(headers0: Headers, leftOver_tls: Chunk[Byte], refStart: Ref[Boolean]): ZIO[Env, Throwable, Unit] = {
-
-    val header_pair = raw"(.{2,100}):\s+(.+)".r
-    val http_line = raw"([A-Z]{3,8})\s+(.+)\s+(HTTP/.+)".r
-
+  def processIncoming(
+      headers0: Headers,
+      leftOver_tls: Chunk[Byte],
+      refStart: Ref[Boolean]
+  ): ZIO[Env, Throwable, Unit] = {
     for {
       streamId <- streamIdRef.getAndUpdate(_ + 2)
       start <- refStart.get
-      v <- if (start) ZIO.attempt((headers0, leftOver_tls)) else splitHeadersAndBody(ch, Chunk.empty[Byte])
-      header_bytes = v._1
+      v <-
+        if (start) ZIO.attempt((headers0, leftOver_tls))
+        else
+          for {
+            r0 <- splitHeadersAndBody(ch, Chunk.empty[Byte])
+            headers_bytes = r0._1
+            leftover_bytes = r0._2
+            v1 <- getHttpHeaderAndLeftover(headers_bytes, true)
+          } yield (v1._1, leftover_bytes)
+
+      headers_received = v._1
       leftover = v._2
 
-      headers <- ZIO.attempt(translateHeadersFrom11to2(headers0))
+      headers <- ZIO.attempt(translateHeadersFrom11to2(headers_received))
 
       _ <- refStart.set(false)
 
@@ -126,7 +179,7 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
     } yield ()
   }
 
-  def route2(streamId: Int, request: Request, requestChunked : Boolean): ZIO[Env, Throwable, Unit] = for {
+  def route2(streamId: Int, request: Request, requestChunked: Boolean): ZIO[Env, Throwable, Unit] = for {
     _ <- ZIO.logTrace(
       s"HTTP/1.1 chunked streamId = $streamId ${request.method.name} ${request.path} "
     )
@@ -149,9 +202,7 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
     )
 
     response_o <- (httpRoute(request)).catchAll {
-      case e: java.io.FileNotFoundException =>
-        ZIO.logError(e.toString) *> ZIO.succeed(None)
-      case e: java.nio.file.NoSuchFileException =>
+      case e: (java.io.FileNotFoundException | java.nio.file.NoSuchFileException) =>
         ZIO.logError(e.toString) *> ZIO.succeed(None)
       case e =>
         ZIO.logError(e.toString) *>
@@ -170,7 +221,7 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
           )
         } yield ()
       case None =>
-        ZIO.logDebug(
+        ZIO.logInfo(
           s"HTTP/1.1 streamId = $streamId ${request.method.name} ${request.path} ${StatusCode.NotFound.toString()}"
         ) *> ResponseWriters11.writeNoBodyResponse(ch, StatusCode.NotFound, false)
     }

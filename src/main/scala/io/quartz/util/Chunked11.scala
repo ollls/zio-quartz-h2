@@ -103,7 +103,6 @@ object Chunked11 {
       val converter: ZChannel[Any, Exception, Chunk[Byte], Any, Exception, Chunk[Chunk[Byte]], Any] = ZChannel.readWith(
         (in: Chunk[Byte]) => {
           val res = produceChunk(leftOver ++ in)
-
           res match {
             case (Some(chunk), leftover, false) => {
               if (leftover.size == 0) ZChannel.write(Chunk.single(chunk)) *> chunk_converter(leftover)
@@ -116,12 +115,14 @@ object Chunked11 {
                     ZChannel.write(Chunk.single(chunk)) *> channel_opt.get *> chunk_converter(leftover1)
 
                 } else {
+                  //println( "eof chunk " + chunk.toString )
                   ZChannel.write(Chunk.single(chunk)) *> ZChannel.succeed(true) // r._1 //*> ZChannel.succeed()
                 }
               }
 
             }
             case (None, leftover, false) => { chunk_converter(leftover) } // no chunk yet but data coming
+            case (None, leftover, true)  => ZChannel.succeed(true)
             case _                       => ZChannel.fail(new Exception("chunkedDecode: Unexpected error"))
           }
         },

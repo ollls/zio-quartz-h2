@@ -876,9 +876,7 @@ class Http2Connection[Env](
       )
 
       response_o <- (httpRoute(request)).catchAll {
-        case e: java.io.FileNotFoundException =>
-          ZIO.logError(e.toString) *> ZIO.succeed(None)
-        case e: java.nio.file.NoSuchFileException =>
+        case e: (java.io.FileNotFoundException | java.nio.file.NoSuchFileException) =>
           ZIO.logError(e.toString) *> ZIO.succeed(None)
         case e =>
           ZIO.logError(e.toString) *>
@@ -888,7 +886,9 @@ class Http2Connection[Env](
       _ <- response_o match {
         case Some(response) =>
           for {
-            _ <- ZIO.logInfo(s"H2 streamId = $streamId ${request.method.name} ${request.path} ${response.code.toString()}")
+            _ <- ZIO.logInfo(
+              s"H2 streamId = $streamId ${request.method.name} ${request.path} ${response.code.toString()}"
+            )
             _ <- ZIO.logTrace("response.headers: " + response.headers.printHeaders(" | "))
             endStreamInHeaders <- if (response.stream == Response.EmptyStream) ZIO.succeed(true) else ZIO.succeed(false)
             _ <- ZIO.logDebug(
