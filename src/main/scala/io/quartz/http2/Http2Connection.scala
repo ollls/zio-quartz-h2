@@ -852,7 +852,7 @@ class Http2Connection[Env](
   def route2(streamId: Int, request: Request): ZIO[Env, Throwable, Unit] = {
 
     val T = for {
-      _ <- ZIO.logDebug(s"H2 streamId = $streamId ${request.method.name} ${request.path} ")
+      _ <- ZIO.logTrace(s"H2 streamId = $streamId ${request.method.name} ${request.path} ")
       _ <- ZIO.logDebug("request.headers: " + request.headers.printHeaders(" | "))
 
       _ <- ZIO.when(request.headers.tbl.size == 0)(
@@ -888,6 +888,7 @@ class Http2Connection[Env](
       _ <- response_o match {
         case Some(response) =>
           for {
+            _ <- ZIO.logInfo(s"H2 streamId = $streamId ${request.method.name} ${request.path} ${response.code.toString()}")
             _ <- ZIO.logTrace("response.headers: " + response.headers.printHeaders(" | "))
             endStreamInHeaders <- if (response.stream == Response.EmptyStream) ZIO.succeed(true) else ZIO.succeed(false)
             _ <- ZIO.logDebug(

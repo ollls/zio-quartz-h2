@@ -56,7 +56,9 @@ object Chunked11 {
 
     val str_str = new String(in.slice(0, splitAt).toArray)
 
-    val chunkSize = Integer.parseInt(new String(in.slice(0, splitAt).toArray), 16)
+    val chunkSize =
+      try { Integer.parseInt(new String(in.slice(0, splitAt).toArray), 16) }
+      catch { case e: NumberFormatException => 0 }
 
     if (chunkSize > 0 && chunkSize < in.size - idx + 2 + 1) {
       val chunk = in.slice(splitAt + 2, splitAt + 2 + chunkSize)

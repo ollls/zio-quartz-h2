@@ -10,9 +10,6 @@ import io.quartz.http2.routes.HttpRoute
 import zio.{ZIO, Task, Chunk, Promise, Ref}
 import zio.stream.ZStream
 
-//TODO headertranslation 11 -> 2, 2 -> 11
-//TODO better fallback loggging
-
 object Http11Connection {
 
   val MAX_ALLOWED_CONTENT_LEN = 1048576 * 100 // 104 MB
@@ -78,7 +75,7 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
 
   }
 
-  def processIncoming(headers0: Headers, leftOver: Chunk[Byte], refStart: Ref[Boolean]): ZIO[Env, Throwable, Unit] = {
+  def processIncoming(headers0: Headers, leftOver_tls: Chunk[Byte], refStart: Ref[Boolean]): ZIO[Env, Throwable, Unit] = {
 
     val header_pair = raw"(.{2,100}):\s+(.+)".r
     val http_line = raw"([A-Z]{3,8})\s+(.+)\s+(HTTP/.+)".r
@@ -86,7 +83,7 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
     for {
       streamId <- streamIdRef.getAndUpdate(_ + 2)
       start <- refStart.get
-      v <- if (start) ZIO.attempt((headers0, leftOver)) else splitHeadersAndBody(ch, Chunk.empty[Byte])
+      v <- if (start) ZIO.attempt((headers0, leftOver_tls)) else splitHeadersAndBody(ch, Chunk.empty[Byte])
       header_bytes = v._1
       leftover = v._2
 
@@ -96,7 +93,7 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
 
       /* TODO VALIDATION ?*/
 
-      body_stream = (ZStream(leftOver) ++ ZStream.repeatZIO(ch.read())).flatMap(ZStream.fromChunk(_))
+      body_stream = (ZStream(leftover) ++ ZStream.repeatZIO(ch.read())).flatMap(ZStream.fromChunk(_))
 
       isChunked <- ZIO.succeed(headers.getMval("transfer-encoding").exists(_.equalsIgnoreCase("chunked")))
       isContinue <- ZIO.succeed(headers.get("Expect").getOrElse("").equalsIgnoreCase("100-continue"))
@@ -124,12 +121,12 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
 
       http11request <- ZIO.attempt(Request(id, streamId, headers, stream, emptyTH))
 
-      _ <- route2(streamId, http11request)
+      _ <- route2(streamId, http11request, isChunked)
 
     } yield ()
   }
 
-  def route2(streamId: Int, request: Request): ZIO[Env, Throwable, Unit] = for {
+  def route2(streamId: Int, request: Request, requestChunked : Boolean): ZIO[Env, Throwable, Unit] = for {
     _ <- ZIO.logTrace(
       s"HTTP/1.1 chunked streamId = $streamId ${request.method.name} ${request.path} "
     )
@@ -168,8 +165,8 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
             ch,
             response.hdr(("Transfer-Encoding" -> "chunked"))
           )
-          _ <- ZIO.logDebug(
-            s"HTTP/1.1 chunked streamId = $streamId ${request.method.name} ${request.path} ${response.code.toString()}"
+          _ <- ZIO.logInfo(
+            s"HTTP/1.1 streamId = $streamId ${request.method.name} ${request.path} chunked=$requestChunked ${response.code.toString()}"
           )
         } yield ()
       case None =>
