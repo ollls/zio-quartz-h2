@@ -139,7 +139,8 @@ object ResponseWriters11 {
     r ++= "Date: " + dfmt.format(new java.util.Date()) + " GMT" + CRLF
     // r ++= "Server: " + TAG + CRLF
     resp.headers.foreach { case (key, value) =>
-      r ++= key + ": " + value + CRLF
+      if (key.startsWith(":") == false)
+        r ++= key + ": " + value + CRLF
     }
 
     if (close)

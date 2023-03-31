@@ -10,7 +10,6 @@ import io.quartz.http2.routes.HttpRoute
 import zio.{ZIO, Task, Chunk, Promise, Ref}
 import zio.stream.ZStream
 
-//TODO streamID increment, while keepalive
 //TODO headertranslation 11 -> 2, 2 -> 11
 //TODO better fallback loggging
 
@@ -19,12 +18,13 @@ object Http11Connection {
   val MAX_ALLOWED_CONTENT_LEN = 1048576 * 100 // 104 MB
 
   def make[Env](ch: IOChannel, id: Long, keepAliveMs: Int, httpRoute: HttpRoute[Env]) = for {
+    streamIdRef <- Ref.make(0)
     _ <- ZIO.succeed(ch.timeOutMs(keepAliveMs))
-    c <- ZIO.attempt(new Http11Connection(ch, id, httpRoute))
+    c <- ZIO.attempt(new Http11Connection(ch, id, streamIdRef, httpRoute))
   } yield (c)
 }
 
-class Http11Connection[Env](ch: IOChannel, val id: Long, httpRoute: HttpRoute[Env]) {
+class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], httpRoute: HttpRoute[Env]) {
   def shutdown: Task[Unit] =
     ZIO.logInfo("Http11Connection.shutdown")
 
@@ -38,18 +38,6 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, httpRoute: HttpRoute[En
     })
 
     new Headers(map)
-  }
-
-  def translateHeadersFrom2to11(headers: Headers): Headers = {
-      val map = headers.tbl.map((k, v) => {
-      val k1 = k.toLowerCase() match {
-        case ":authority"    => "host"
-        case k: String => k
-      }
-      (k1, v)
-    })
-    new Headers(map)
-
   }
 
   private[this] def testWithStatePos(byte: Byte, pattern: Array[Byte], statusPos: Int): Int = {
@@ -96,6 +84,7 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, httpRoute: HttpRoute[En
     val http_line = raw"([A-Z]{3,8})\s+(.+)\s+(HTTP/.+)".r
 
     for {
+      streamId <- streamIdRef.getAndUpdate(_ + 2)
       start <- refStart.get
       v <- if (start) ZIO.attempt((headers0, leftOver)) else splitHeadersAndBody(ch, Chunk.empty[Byte])
       header_bytes = v._1
@@ -133,16 +122,16 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, httpRoute: HttpRoute[En
       emptyTH <- Promise.make[Throwable, Headers] // no trailing headers for 1.1
       _ <- emptyTH.succeed(Headers()) // complete with empty
 
-      http11request <- ZIO.attempt(Request(id, 1, headers, stream, emptyTH))
+      http11request <- ZIO.attempt(Request(id, streamId, headers, stream, emptyTH))
 
-      _ <- route2(1, http11request)
+      _ <- route2(streamId, http11request)
 
     } yield ()
   }
 
   def route2(streamId: Int, request: Request): ZIO[Env, Throwable, Unit] = for {
     _ <- ZIO.logTrace(
-      s"HTTP/1.1 streamId = $streamId ${request.method.name} ${request.path} "
+      s"HTTP/1.1 chunked streamId = $streamId ${request.method.name} ${request.path} "
     )
     _ <- ZIO.logDebug("request.headers: " + request.headers.printHeaders(" | "))
 
@@ -176,7 +165,8 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, httpRoute: HttpRoute[En
       case Some(response) =>
         for {
           _ <- ResponseWriters11.writeFullResponseFromStreamChunked(
-            ch, response.hdr(("Transfer-Encoding" -> "chunked"))
+            ch,
+            response.hdr(("Transfer-Encoding" -> "chunked"))
           )
           _ <- ZIO.logDebug(
             s"HTTP/1.1 chunked streamId = $streamId ${request.method.name} ${request.path} ${response.code.toString()}"
