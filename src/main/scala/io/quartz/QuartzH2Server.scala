@@ -2,10 +2,7 @@ package io.quartz
 
 import zio.{ZIO, UIO, Task, Chunk, Promise, Ref, ExitCode, ZIOApp}
 import zio.stream.ZStream
-
-import io.quartz.http2.Http2Connection
 import io.quartz.netio._
-
 import java.net.InetSocketAddress
 import java.net.SocketAddress
 import java.nio.channels.Channel
@@ -152,13 +149,13 @@ class QuartzH2Server[Env](
       })
   )
 
-  private def parseHeaderLine(line: String, hdrs: Headers): Headers =
+  private def parseHeaderLine(line: String, hdrs: Headers, secure: Boolean): Headers =
     line match {
       case http_line(method, path, _) =>
         hdrs ++ Headers(
           ":method" -> method,
           ":path" -> path,
-          ":scheme" -> "http"
+          ":scheme" -> (if (secure) "https" else "http")
         ) // FIX TBD - no schema for now, ":scheme" -> prot)
       case header_pair(attr, value) => hdrs + (attr.toLowerCase -> value)
       case _                        => hdrs
@@ -206,10 +203,9 @@ class QuartzH2Server[Env](
     r ++= CRLF
 
     r.toString()
-
   }
 
-  def getHttpHeaderAndLeftover(chunk: Chunk[Byte]): (Headers, Chunk[Byte]) = {
+  def getHttpHeaderAndLeftover(chunk: Chunk[Byte], secure: Boolean): (Headers, Chunk[Byte]) = {
     var cur = chunk
     var stop = false
     var complete = false
@@ -221,7 +217,7 @@ class QuartzH2Server[Env](
         stop = true
       } else {
         val line = cur.take(i)
-        hdrs = parseHeaderLine(new String(line.toArray), hdrs)
+        hdrs = parseHeaderLine(new String(line.toArray), hdrs, secure)
         cur = cur.drop(i + 2)
         if (line.size == 0) {
           complete = true;
@@ -278,53 +274,59 @@ class QuartzH2Server[Env](
       keepAliveMs: Int,
       route: HttpRoute[Env],
       buf: Chunk[Byte]
-  ): ZIO[Env, Throwable, Unit] = {
-    val R = for {
-      _ <- ZIO.logTrace("doConnectUpgrade()")
-      hb <- ZIO.attempt(getHttpHeaderAndLeftover(buf))
-      leftover = hb._2
-      headers11 = hb._1
-      contentLen = headers11.get("Content-Length").getOrElse("0").toLong
+  ): ZIO[Env, Throwable, Unit] = for {
+    _ <- ZIO.logTrace("doConnectUpgrade()")
+    hb <- ZIO.attempt(getHttpHeaderAndLeftover(buf, ch.secure))
+    leftover = hb._2
+    headers11 = hb._1
+    contentLen = headers11.get("Content-Length").getOrElse("0").toLong
 
-      s1 <- ZIO.attempt(
-        ZStream[Chunk[Byte]](leftover).flatMap(c0 => ZStream.fromChunk(c0))
-      )
-      s2 <- ZIO.attempt(
-        ZStream.repeatZIO(ch.read(HTTP1_KEEP_ALIVE_MS)).flatMap(c0 => ZStream.fromChunk(c0))
-      )
-      res <- ZIO.attempt((s1 ++ s2).take(contentLen))
+    s1 <- ZIO.attempt(
+      ZStream[Chunk[Byte]](leftover).flatMap(c0 => ZStream.fromChunk(c0))
+    )
+    s2 <- ZIO.attempt(
+      ZStream.repeatZIO(ch.read(HTTP1_KEEP_ALIVE_MS)).flatMap(c0 => ZStream.fromChunk(c0))
+    )
+    res <- ZIO.attempt((s1 ++ s2).take(contentLen))
 
-      emptyTH <- Promise.make[Throwable, Headers] // no trailing headers for 1.1
-      _ <- emptyTH.succeed(Headers()) // complete with empty
-      http11request <- ZIO.attempt(Some(Request(id, 1, headers11, res, emptyTH)))
-      upd = headers11.get("upgrade").getOrElse("")
-      _ <- ZIO.logTrace("doConnectUpgrade() - Upgrade = " + upd)
-      clientPreface <-
-        if (upd == "h2c") {
-          ZIO.logTrace("doConnectUpgrade() - h2c upgrade requested") *>
-            ch.write(ByteBuffer.wrap(protoSwitch().getBytes)) *>
-            ch.read(
-              HTTP1_KEEP_ALIVE_MS
-            ) // clent preface and remote peer/client setting array  !!!!FIX NEDED
-        } else
-          ZIO.fail(new BadProtocol(ch, "HTTP2 Upgrade Request Denied"))
-      bbuf <- ZIO.attempt(ByteBuffer.wrap(clientPreface.toArray))
-      isOK <- ZIO.attempt(Frames.checkPreface(bbuf))
-      c <-
-        if (isOK) Http2Connection.make(ch, id, maxStreams, keepAliveMs, route, incomingWinSize, http11request)
-        else
-          ZIO.fail(
-            new BadProtocol(ch, "Cannot see HTTP2 Preface, bad protocol")
-          )
-      _ <- ZIO.scoped {
-        ZIO
-          .acquireRelease(ZIO.succeed(c))(c => onDisconnect(c.id) *> c.shutdown.catchAll(_ => ZIO.unit))
-          .tap(c => onConnect(c.id))
-          .flatMap(_.processIncoming(clientPreface.drop(PrefaceString.length)))
-      }
-    } yield ()
-    R
-  }
+    emptyTH <- Promise.make[Throwable, Headers] // no trailing headers for 1.1
+    _ <- emptyTH.succeed(Headers()) // complete with empty
+    http11request <- ZIO.attempt(Some(Request(id, 1, headers11, res, emptyTH)))
+    upd = headers11.get("upgrade").getOrElse("")
+    _ <- ZIO.logTrace("doConnectUpgrade() - Upgrade = " + upd)
+    _ <-
+      if (upd != "h2c") for {
+        c <- Http11Connection.make(ch, id, keepAliveMs, route)
+        refStart <- Ref.make(true)
+        _ <- ZIO.scoped {
+          ZIO
+            .acquireRelease(ZIO.succeed(c))(c => onDisconnect(c.id) *> c.shutdown.catchAll(_ => ZIO.unit))
+            .tap(c => onConnect(c.id))
+            .flatMap(_.processIncoming(headers11, leftover, refStart).forever)
+        }
+        // _ <- ZIO.fail(new BadProtocol(ch, "HTTP2 Upgrade Request Denied"))
+      } yield ()
+      else
+        for {
+          _ <- ZIO.logTrace("doConnectUpgrade() - h2c upgrade requested")
+          _ <- ch.write(ByteBuffer.wrap(protoSwitch().getBytes))
+          clientPreface <- ch.read(HTTP1_KEEP_ALIVE_MS)
+          bbuf <- ZIO.attempt(ByteBuffer.wrap(clientPreface.toArray))
+          isOK <- ZIO.attempt(Frames.checkPreface(bbuf))
+          c <-
+            if (isOK) Http2Connection.make(ch, id, maxStreams, keepAliveMs, route, incomingWinSize, http11request)
+            else
+              ZIO.fail(
+                new BadProtocol(ch, "Cannot see HTTP2 Preface, bad protocol")
+              )
+          _ <- ZIO.scoped {
+            ZIO
+              .acquireRelease(ZIO.succeed(c))(c => onDisconnect(c.id) *> c.shutdown.catchAll(_ => ZIO.unit))
+              .tap(c => onConnect(c.id))
+              .flatMap(_.processIncoming(clientPreface.drop(PrefaceString.length)))
+          }
+        } yield ()
+  } yield ()
 
   ///////////////////////////////////
   def errorHandler(e: Throwable) = {

@@ -1,6 +1,5 @@
 package io.quartz.netio
 
-
 import java.net._;
 import java.io._;
 
@@ -40,6 +39,8 @@ class SocketChannel(val socket: Socket) extends IOChannel {
     }
   }
 
-   def remoteAddress(): Task[SocketAddress] = ZIO.attempt(socket.getRemoteSocketAddress())
+  def remoteAddress(): Task[SocketAddress] = ZIO.attempt(socket.getRemoteSocketAddress())
+
+  def secure = true // it is only true for zio-quartz-h2, we don't use it open.
 
 }

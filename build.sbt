@@ -47,10 +47,10 @@ lazy val root = (project in file("."))
     organization := "io.github.ollls",
     name := "zio-quartz-h2",
     libraryDependencies += scalaTest % Test,
-    libraryDependencies += "dev.zio" %% "zio" % "2.0.5",
+    libraryDependencies += "dev.zio" %% "zio" % "2.0.10",
     libraryDependencies += "com.twitter" % "hpack" % "1.0.2",
     // libraryDependencies += "dev.zio" %% "zio-logging" % "2.1.5",
-    libraryDependencies += "dev.zio" %% "zio-logging-slf4j" % "2.1.5",
+    libraryDependencies += "dev.zio" %% "zio-logging-slf4j" % "2.1.11",
     libraryDependencies += "org.slf4j" % "slf4j-api" % "2.0.4",
     libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.3.5"
   )
