@@ -36,6 +36,7 @@ import io.quartz.http2.routes.HttpRoute
 import io.quartz.http2.routes.WebFilter
 import io.quartz.http2.routes.Routes
 import io.quartz.http2.routes.HttpRouteIO
+import io.quartz.util.Utils
 
 import java.net._
 import java.io._
@@ -121,9 +122,6 @@ class QuartzH2Server[Env](
 
   val default_server_settings = new Http2Settings()
 
-  val header_pair = raw"(.{2,100}):\s+(.+)".r
-  val http_line = raw"([A-Z]{3,8})\s+(.+)\s+(HTTP/.+)".r
-
   def ctrlC_handlerZIO(group: AsynchronousChannelGroup, s0: AsynchronousServerSocketChannel) = ZIO.attempt(
     java.lang.Runtime
       .getRuntime()
@@ -148,18 +146,6 @@ class QuartzH2Server[Env](
         }
       })
   )
-
-  private def parseHeaderLine(line: String, hdrs: Headers, secure: Boolean): Headers =
-    line match {
-      case http_line(method, path, _) =>
-        hdrs ++ Headers(
-          ":method" -> method,
-          ":path" -> path,
-          ":scheme" -> (if (secure) "https" else "http")
-        ) // FIX TBD - no schema for now, ":scheme" -> prot)
-      case header_pair(attr, value) => hdrs + (attr.toLowerCase -> value)
-      case _                        => hdrs
-    }
 
   def protoSwitch() = {
     val CRLF = "\r\n"
@@ -205,33 +191,6 @@ class QuartzH2Server[Env](
     r.toString()
   }
 
-  def getHttpHeaderAndLeftover(chunk: Chunk[Byte], secure: Boolean): (Headers, Chunk[Byte]) = {
-    var cur = chunk
-    var stop = false
-    var complete = false
-    var hdrs = Headers()
-
-    while (stop == false) {
-      val i = cur.indexWhere(_ == 0x0d)
-      if (i < 0) {
-        stop = true
-      } else {
-        val line = cur.take(i)
-        hdrs = parseHeaderLine(new String(line.toArray), hdrs, secure)
-        cur = cur.drop(i + 2)
-        if (line.size == 0) {
-          complete = true;
-          stop = true;
-        }
-      }
-    }
-
-    // won't use stream to fetch all headers, must be present at once in one bufer read ops.
-    if (complete == false)
-      ZIO.fail(new HeaderSizeLimitExceeded(""))
-    (hdrs, cur)
-  }
-
   def doConnect(
       ch: IOChannel,
       idRef: Ref[Long],
@@ -249,7 +208,7 @@ class QuartzH2Server[Env](
 
       testbb <- ZIO.attempt(ByteBuffer.wrap(test.toArray))
       isOK <- ZIO.attempt(Frames.checkPreface(testbb))
-      _ <- ZIO.logTrace("doConnect() - Preface result: " + isOK)
+      _ <- ZIO.logTrace(s"doConnect() - Preface result: $isOK")
       _ <-
         if (isOK == false) {
           doConnectUpgrade(ch, id, maxStreams, keepAliveMs, route, buf)
@@ -264,7 +223,6 @@ class QuartzH2Server[Env](
           }
 
     } yield ()
-
   }
 
   def doConnectUpgrade(
@@ -276,9 +234,12 @@ class QuartzH2Server[Env](
       buf: Chunk[Byte]
   ): ZIO[Env, Throwable, Unit] = for {
     _ <- ZIO.logTrace("doConnectUpgrade()")
-    hb <- ZIO.attempt(getHttpHeaderAndLeftover(buf, ch.secure))
-    leftover = hb._2
-    headers11 = hb._1
+
+    hdrb_body <- Utils.splitHeadersAndBody(ch, buf)
+    hdr_body <- Utils.getHttpHeaderAndLeftover(hdrb_body._1, ch.secure)
+
+    leftover = hdrb_body._2
+    headers11 = hdr_body._1
     contentLen = headers11.get("Content-Length").getOrElse("0").toLong
 
     s1 <- ZIO.attempt(
@@ -292,7 +253,7 @@ class QuartzH2Server[Env](
     emptyTH <- Promise.make[Throwable, Headers] // no trailing headers for 1.1
     _ <- emptyTH.succeed(Headers()) // complete with empty
     http11request <- ZIO.attempt(Some(Request(id, 1, headers11, res, emptyTH)))
-    upd = headers11.get("upgrade").getOrElse("")
+    upd = headers11.get("upgrade").getOrElse("<N/A>")
     _ <- ZIO.logTrace("doConnectUpgrade() - Upgrade = " + upd)
     _ <-
       if (upd != "h2c") for {

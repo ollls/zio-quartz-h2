@@ -887,7 +887,7 @@ class Http2Connection[Env](
         case Some(response) =>
           for {
             _ <- ZIO.logInfo(
-              s"H2 streamId = $streamId ${request.method.name} ${request.path} ${response.code.toString()}"
+              s"H2 connId=$id streamId=$streamId ${request.method.name} ${request.path} ${response.code.toString()}"
             )
             _ <- ZIO.logTrace("response.headers: " + response.headers.printHeaders(" | "))
             endStreamInHeaders <- if (response.stream == Response.EmptyStream) ZIO.succeed(true) else ZIO.succeed(false)
@@ -942,6 +942,9 @@ class Http2Connection[Env](
             o44 <- ZIO.succeed(Response.Error(StatusCode.NotFound)) // 404
             _ <- ZIO.logTrace("response.headers: " + o44.headers.printHeaders(" | "))
             _ <- ZIO.logDebug(s"Send response code: ${o44.code.toString()}")
+            _ <- ZIO.logInfo(
+              s"H2 connId=$id streamId=$streamId ${request.method.name} ${request.path} ${StatusCode.NotFound.toString()}"
+            )
 
             _ <- ZIO.scoped {
               hSem.withPermitScoped.tap(_ =>
