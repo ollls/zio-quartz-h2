@@ -475,7 +475,7 @@ class QuartzH2Server[Env](
             c.setUseClientMode(false);
             c.setHandshakeApplicationProtocolSelector((eng, list) => {
               if (list.asScala.find(_ == "h2").isDefined) "h2"
-              else null
+              else ""
             })
           }
         )

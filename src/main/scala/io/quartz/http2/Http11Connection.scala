@@ -11,6 +11,8 @@ import zio.{ZIO, Task, Chunk, Promise, Ref}
 import zio.stream.ZStream
 
 case class HeaderSizeLimitExceeded(msg: String) extends Exception(msg)
+case class BadIncomingData(msg: String) extends Exception(msg)
+
 object Http11Connection {
 
   val MAX_ALLOWED_CONTENT_LEN = 1048576 * 100 // 104 MB
@@ -134,7 +136,7 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
             r0 <- splitHeadersAndBody(ch, Chunk.empty[Byte])
             headers_bytes = r0._1
             leftover_bytes = r0._2
-            v1 <- getHttpHeaderAndLeftover(headers_bytes, true)
+            v1 <- getHttpHeaderAndLeftover(headers_bytes, ch.secure)
           } yield (v1._1, leftover_bytes)
 
       headers_received = v._1
@@ -144,7 +146,10 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
 
       _ <- refStart.set(false)
 
-      /* TODO VALIDATION ?*/
+
+      validate <- ZIO.when(headers.validatePseudoHeaders == false)(
+        ZIO.fail(new BadIncomingData("bad inbound data or invalid request"))
+      )
 
       body_stream = (ZStream(leftover) ++ ZStream.repeatZIO(ch.read())).flatMap(ZStream.fromChunk(_))
 
@@ -186,19 +191,11 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
     _ <- ZIO.logDebug("request.headers: " + request.headers.printHeaders(" | "))
 
     _ <- ZIO.when(request.headers.tbl.size == 0)(
-      ZIO.fail(ErrorGen(streamId, Error.COMPRESSION_ERROR, "empty headers: COMPRESSION_ERROR"))
+      ZIO.fail(ErrorGen(streamId, Error.COMPRESSION_ERROR, "http11 empty headers"))
     )
 
     _ <- ZIO.when(request.headers.ensureLowerCase == false)(
       ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "Upercase letters in the header keys"))
-    )
-
-    _ <- ZIO.when(request.headers.validatePseudoHeaders == false)(
-      ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "Invalid pseudo-header field"))
-    )
-
-    _ <- ZIO.when(request.headers.get("connection").isDefined == true)(
-      ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "Connection-specific header field forbidden"))
     )
 
     response_o <- (httpRoute(request)).catchAll {
