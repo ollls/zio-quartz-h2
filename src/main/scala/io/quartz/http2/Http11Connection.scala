@@ -19,7 +19,7 @@ object Http11Connection {
   val MAX_ALLOWED_CONTENT_LEN = 1048576 * 100 // 104 MB
 
   def make[Env](ch: IOChannel, id: Long, keepAliveMs: Int, httpRoute: HttpRoute[Env]) = for {
-    streamIdRef <- Ref.make(0)
+    streamIdRef <- Ref.make(1)
     _ <- ZIO.succeed(ch.timeOutMs(keepAliveMs))
     c <- ZIO.attempt(new Http11Connection(ch, id, streamIdRef, httpRoute))
   } yield (c)
@@ -28,7 +28,7 @@ object Http11Connection {
 class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], httpRoute: HttpRoute[Env]) {
 
   def shutdown: Task[Unit] =
-    ZIO.logInfo("Http11Connection.shutdown")
+    ZIO.logDebug("Http11Connection.shutdown")
 
   def translateHeadersFrom11to2(headers: Headers): Headers = {
     val map = headers.tbl.map((k, v) => {
