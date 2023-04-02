@@ -65,10 +65,10 @@ object MyApp extends ZIOAppDefault {
 
     //automatic multi-part upload, file names preserved  
     case req @ POST -> Root / "mpart" =>
-      MultiPart.writeAll(req, "/Users/user000/") *> ZIO.succeed(Response.Ok())
+      MultiPart.writeAll(req, "/Users/ostrygun/") *> ZIO.succeed(Response.Ok())
 
     case req @ POST -> Root / "upload" / StringVar(file) =>
-      val FOLDER_PATH = "/Users/user00/web_root/"
+      val FOLDER_PATH = "/Users/ostrygun/web_root/"
       val FILE = s"$file"
       for {
         jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
@@ -96,7 +96,7 @@ object MyApp extends ZIOAppDefault {
       ZIO.attempt(Response.Ok().asStream(ts))
 
     case GET -> Root / StringVar(file) =>
-      val FOLDER_PATH = "/Users/user000/web_root/"
+      val FOLDER_PATH = "/Users/ostrygun/web_root/"
       val FILE = s"$file"
       val BLOCK_SIZE = 16000
       for {
@@ -120,8 +120,8 @@ object MyApp extends ZIOAppDefault {
     val env = ZLayer.fromZIO(ZIO.succeed("Hello ZIO World!"))
     (for {
       ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
-      exitCode <- new QuartzH2Server("localhost", 8443, 16000, ctx, /*2097152*/
-      onConnect = onConnect, onDisconnect = onDisconnect).startIO(R, filter, sync = false)
+      exitCode <- new QuartzH2Server("localhost", 8443, 16000, ctx, 2097152,
+      onConnect = onConnect, onDisconnect = onDisconnect).startIO(R, filter, sync = true)
 
     } yield (exitCode)).provideSomeLayer(env)
 

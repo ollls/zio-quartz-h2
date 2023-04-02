@@ -1,0 +1,55 @@
+09:20:29.650 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server - HTTP/2 TLS Service: QuartzH2 (async - Java NIO)
+09:20:29.657 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server - Concurrency level(max threads): 16, max streams per conection: 32
+09:20:29.658 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server - H2 Idle Timeout: 16000 Ms
+09:20:29.659 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server - Listens: localhost:8443
+09:20:53.806 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server - HTTP/2 TLS Service: QuartzH2 (async - Java NIO)
+09:20:53.810 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server - Concurrency level(max threads): 16, max streams per conection: 32
+09:20:53.811 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server - H2 Idle Timeout: 16000 Ms
+09:20:53.812 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server - Listens: localhost:8443
+09:21:39.702 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server - HTTP/2 TLS Service: QuartzH2 (async - Java NIO)
+09:21:39.706 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server - Concurrency level(max threads): 16, max streams per conection: 32
+09:21:39.708 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server - H2 Idle Timeout: 16000 Ms
+09:21:39.709 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server - Listens: localhost:8443
+09:21:47.672 [ZScheduler-Worker-15] INFO  io.quartz.QuartzH2Server.run0 - Connect from remote peer: 127.0.0.1
+09:21:48.057 [ZScheduler-Worker-11] INFO  io.quartz.util.MultiPart - HTTP multipart request: processing file pics.jpeg
+09:21:48.195 [ZScheduler-Worker-6] INFO  io.quartz.util.MultiPart - HTTP multipart request: processing file IMG_2964.mov
+09:21:49.172 [ZScheduler-Worker-14] INFO  io.quartz.util.MultiPart - HTTP multipart request: processing file IMG_0278.jpeg
+09:21:49.322 [ZScheduler-Worker-1] INFO  io.quartz.http2.Http11Connection - HTTP/1.1 connId=1 streamId=1 POST /mpart chunked=true 200
+09:23:12.274 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server - HTTP/2 TLS Service: QuartzH2 (async - Java NIO)
+09:23:12.277 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server - Concurrency level(max threads): 16, max streams per conection: 32
+09:23:12.278 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server - H2 Idle Timeout: 16000 Ms
+09:23:12.279 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server - Listens: localhost:8443
+09:23:17.408 [ZScheduler-Worker-14] INFO  io.quartz.QuartzH2Server.run0 - Connect from remote peer: 127.0.0.1
+09:23:17.798 [ZScheduler-Worker-11] INFO  io.quartz.http2.Http11Connection - HTTP/1.1 connId=1 streamId=1 GET /IMG_0546.jpeg chunked=false 200
+09:23:18.550 [ZScheduler-Worker-0] INFO  io.quartz.http2.Http11Connection - HTTP/1.1 connId=1 streamId=3 GET /IMG_0546.jpeg chunked=false 200
+09:23:19.303 [ZScheduler-Worker-8] INFO  io.quartz.http2.Http11Connection - HTTP/1.1 connId=1 streamId=5 GET /IMG_0546.jpeg chunked=false 200
+09:23:19.930 [ZScheduler-Worker-0] INFO  io.quartz.http2.Http11Connection - HTTP/1.1 connId=1 streamId=7 GET /IMG_0546.jpeg chunked=false 200
+09:23:20.228 [ZScheduler-Worker-11] INFO  io.quartz.http2.Http11Connection - HTTP/1.1 connId=1 streamId=9 GET /IMG_0546.jpeg chunked=false 200
+09:23:20.519 [ZScheduler-Worker-7] INFO  io.quartz.http2.Http11Connection - HTTP/1.1 connId=1 streamId=11 GET /IMG_0546.jpeg chunked=false 200
+09:23:20.839 [ZScheduler-Worker-7] INFO  io.quartz.http2.Http11Connection - HTTP/1.1 connId=1 streamId=13 GET /IMG_0546.jpeg chunked=false 200
+09:23:21.071 [ZScheduler-Worker-10] INFO  io.quartz.http2.Http11Connection - HTTP/1.1 connId=1 streamId=15 GET /IMG_0546.jpeg chunked=false 200
+09:23:21.371 [ZScheduler-Worker-6] INFO  io.quartz.http2.Http11Connection - HTTP/1.1 connId=1 streamId=17 GET /IMG_0546.jpeg chunked=false 200
+09:23:21.599 [ZScheduler-Worker-3] INFO  io.quartz.http2.Http11Connection - HTTP/1.1 connId=1 streamId=19 GET /IMG_0546.jpeg chunked=false 200
+09:24:25.269 [zio-default-blocking-2] INFO  io.quartz.QuartzH2Server - HTTP/2 TLS Service: QuartzH2 ( sync - Java Socket )
+09:24:25.272 [zio-default-blocking-2] INFO  io.quartz.QuartzH2Server - Listens: localhost:8443
+09:24:34.514 [zio-default-blocking-2] INFO  io.quartz.QuartzH2Server.run1 - Connect from remote peer: /127.0.0.1
+09:24:34.845 [ZScheduler-Worker-11] INFO  io.quartz.http2.Http11Connection - HTTP/1.1 connId=1 streamId=1 GET /IMG_0546.jpeg chunked=false 200
+09:24:43.293 [ZScheduler-Worker-4] INFO  io.quartz.http2.Http11Connection - HTTP/1.1 connId=1 streamId=3 GET /IMG_0546.jpeg chunked=false 200
+09:24:44.179 [ZScheduler-Worker-3] INFO  io.quartz.http2.Http11Connection - HTTP/1.1 connId=1 streamId=5 GET /IMG_0546.jpeg chunked=false 200
+09:24:44.965 [ZScheduler-Worker-14] INFO  io.quartz.http2.Http11Connection - HTTP/1.1 connId=1 streamId=7 GET /IMG_0546.jpeg chunked=false 200
+09:24:53.275 [zio-default-blocking-2] INFO  io.quartz.QuartzH2Server.run1 - Connect from remote peer: /127.0.0.1
+09:24:53.370 [zio-default-blocking-3] INFO  io.quartz.util.MultiPart - HTTP multipart request: processing file pics.jpeg
+09:24:53.467 [zio-default-blocking-3] INFO  io.quartz.util.MultiPart - HTTP multipart request: processing file IMG_2964.mov
+09:24:54.518 [zio-default-blocking-3] INFO  io.quartz.util.MultiPart - HTTP multipart request: processing file IMG_0278.jpeg
+09:24:54.714 [ZScheduler-Worker-10] INFO  io.quartz.http2.Http11Connection - HTTP/1.1 connId=2 streamId=1 POST /mpart chunked=true 200
+09:26:20.844 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server - HTTP/2 TLS Service: QuartzH2 ( sync - Java Socket )
+09:26:20.847 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server - Listens: localhost:8443
+09:26:41.242 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server - HTTP/2 TLS Service: QuartzH2 ( sync - Java Socket )
+09:26:41.244 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server - Listens: localhost:8443
+09:26:46.925 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server.run1 - Connect from remote peer: /127.0.0.1
+09:26:47.190 [zio-default-blocking-2] INFO  io.quartz.util.MultiPart - HTTP multipart request: processing file pics.jpeg
+09:26:47.258 [zio-default-blocking-2] INFO  io.quartz.util.MultiPart - HTTP multipart request: processing file IMG_2964.mov
+09:26:48.044 [zio-default-blocking-2] INFO  io.quartz.util.MultiPart - HTTP multipart request: processing file IMG_0278.jpeg
+09:26:48.190 [ZScheduler-Worker-7] INFO  io.quartz.http2.Http11Connection - HTTP/1.1 connId=1 streamId=1 POST /mpart chunked=true 200
+09:26:52.154 [zio-default-blocking-1] INFO  io.quartz.QuartzH2Server.run1 - Connect from remote peer: /127.0.0.1
+09:26:52.232 [ZScheduler-Worker-2] INFO  io.quartz.http2.Http11Connection - HTTP/1.1 connId=2 streamId=1 GET /IMG_0546.jpeg chunked=true 200
