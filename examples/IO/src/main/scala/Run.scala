@@ -120,8 +120,8 @@ object MyApp extends ZIOAppDefault {
     val env = ZLayer.fromZIO(ZIO.succeed("Hello ZIO World!"))
     (for {
       ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
-      exitCode <- new QuartzH2Server("localhost", 8443, 16000, ctx, 2097152,
-      onConnect = onConnect, onDisconnect = onDisconnect).startIO(R, filter, sync = true)
+      exitCode <- new QuartzH2Server("localhost", 8443, 16000, ctx, /*2097152*/
+      onConnect = onConnect, onDisconnect = onDisconnect).startIO(R, filter, sync = false)
 
     } yield (exitCode)).provideSomeLayer(env)
 
