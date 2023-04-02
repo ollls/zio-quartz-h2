@@ -380,7 +380,7 @@ class QuartzH2Server[Env](
         group.provider().openAsynchronousServerSocketChannel(group).bind(addr)
       )
 
-      //_ <- ctrlC_handlerZIO(group, server_ch)
+      _ <- ctrlC_handlerZIO(group, server_ch)
 
       accept = ZIO.logDebug("Wait on accept") *> TCPChannel
         .accept(server_ch)
@@ -482,7 +482,7 @@ class QuartzH2Server[Env](
         group.provider().openAsynchronousServerSocketChannel(group).bind(addr)
       )
 
-      //_ <- ctrlC_handlerZIO(group, server_ch)
+      _ <- ctrlC_handlerZIO(group, server_ch)
 
       accept = ZIO.logDebug("Wait on accept") *> TCPChannel
         .accept(server_ch)
