@@ -380,7 +380,7 @@ class QuartzH2Server[Env](
         group.provider().openAsynchronousServerSocketChannel(group).bind(addr)
       )
 
-      _ <- ctrlC_handlerZIO(group, server_ch)
+      //_ <- ctrlC_handlerZIO(group, server_ch)
 
       accept = ZIO.logDebug("Wait on accept") *> TCPChannel
         .accept(server_ch)
@@ -427,7 +427,7 @@ class QuartzH2Server[Env](
         sslCtx.getServerSocketFactory().createServerSocket(PORT, 0, addr.getAddress()).asInstanceOf[SSLServerSocket]
       )
 
-      _ <- ctrlC_handlerZIOsync(server_ch)
+      //_ <- ctrlC_handlerZIOsync(server_ch)
 
       accept: ZIO[Any, Throwable, SocketChannel] = ZIO
         .attemptBlocking[SSLSocket] { val R: SSLSocket = server_ch.accept().asInstanceOf[SSLSocket]; R }
@@ -482,7 +482,7 @@ class QuartzH2Server[Env](
         group.provider().openAsynchronousServerSocketChannel(group).bind(addr)
       )
 
-      _ <- ctrlC_handlerZIO(group, server_ch)
+      //_ <- ctrlC_handlerZIO(group, server_ch)
 
       accept = ZIO.logDebug("Wait on accept") *> TCPChannel
         .accept(server_ch)
