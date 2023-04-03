@@ -942,7 +942,7 @@ class Http2Connection[Env](
             o44 <- ZIO.succeed(Response.Error(StatusCode.NotFound)) // 404
             _ <- ZIO.logTrace("response.headers: " + o44.headers.printHeaders(" | "))
             _ <- ZIO.logDebug(s"Send response code: ${o44.code.toString()}")
-            _ <- ZIO.logInfo(
+            _ <- ZIO.logError(
               s"H2 connId=$id streamId=$streamId ${request.method.name} ${request.path} ${StatusCode.NotFound.toString()}"
             )
 

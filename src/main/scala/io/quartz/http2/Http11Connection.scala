@@ -139,7 +139,7 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
           )
         } yield ()
       case None =>
-        ZIO.logInfo(
+        ZIO.logError(
           s"HTTP/1.1 connId=$id streamId=$streamId ${request.method.name} ${request.path} ${StatusCode.NotFound.toString()}"
         ) *> ResponseWriters11.writeNoBodyResponse(ch, StatusCode.NotFound, false)
     }
