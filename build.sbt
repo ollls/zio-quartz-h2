@@ -1,10 +1,10 @@
 import Dependencies._
 
-ThisBuild / scalaVersion := "3.2.1"
+ThisBuild / scalaVersion := "3.2.2"
 ThisBuild / version := "0.5.0"
 ThisBuild / organization := "io.github.ollls"
 ThisBuild / organizationName := "ollls"
-ThisBuild / versionScheme := Some("strict")
+ThisBuild / versionScheme := Some("early-semver")
 
 ThisBuild / developers := List(
   Developer(
@@ -48,8 +48,8 @@ lazy val root = (project in file("."))
     name := "zio-quartz-h2",
     libraryDependencies += scalaTest % Test,
     libraryDependencies += "dev.zio" %% "zio" % "2.0.10",
+    libraryDependencies += "dev.zio" %% "zio-streams" % "2.0.10",
     libraryDependencies += "com.twitter" % "hpack" % "1.0.2",
-    // libraryDependencies += "dev.zio" %% "zio-logging" % "2.1.5",
     libraryDependencies += "dev.zio" %% "zio-logging-slf4j" % "2.1.11",
     libraryDependencies += "org.slf4j" % "slf4j-api" % "2.0.4",
     libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.3.5"
