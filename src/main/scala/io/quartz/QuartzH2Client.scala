@@ -106,7 +106,7 @@ object QuartzH2Client {
       )
       _ <- ZIO.logDebug(s"Client: Connecting: $host:$port")
       ch <- TCPChannel.connect(host, port, socketGroup)
-      tls_ch <- ZIO.attempt(new TLSChannel(ctx, ch)).tap(c => c.ssl_initClent_h2())
+      tls_ch <- ZIO.attempt(new TLSChannel(ctx, ch)).tap(c => c.ssl_initClent_h2(host))
 
       alpn_tag0 <- ZIO.attempt(tls_ch.f_SSL.engine.getApplicationProtocol())
       alpn_tag <- ZIO.succeed(if (alpn_tag0 == null) "not selected or empty" else alpn_tag0)

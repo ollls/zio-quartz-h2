@@ -24,6 +24,7 @@ import java.nio.channels.{
   CompletionHandler
 }
 
+import javax.net.ssl.SNIServerName
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 import java.security.cert.X509Certificate
@@ -378,10 +379,17 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
 
   /** Client side ssl init with http/2 alpn tag only.
     */
-  def ssl_initClent_h2(): Task[Unit] = {
+  class SniName(sniServerName: String) extends SNIServerName(0, sniServerName.getBytes())
+  def ssl_initClent_h2(sniServerName: String): Task[Unit] = {
     for {
       _ <- f_SSL.setUseClientMode(true)
       sslParameters <- ZIO.attempt(f_SSL.engine.getSSLParameters())
+      sniList: java.util.List[SNIServerName] <- ZIO.attempt(
+        Array(sniServerName)
+          .map(SniName(_))
+          .foldLeft(new java.util.ArrayList[SNIServerName]())((list, item) => { list.add(item); list })
+      )
+      _ <- ZIO.attempt(sslParameters.setServerNames(sniList))
       _ <- ZIO.attempt(sslParameters.setApplicationProtocols(Array("h2")))
       _ <- ZIO.attempt(f_SSL.engine.setSSLParameters(sslParameters))
       x <- doHandshakeClient()
