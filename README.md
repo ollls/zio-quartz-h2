@@ -9,7 +9,7 @@ ZIO2 native, asyncronous, Java NIO based implementation of http/2 packet streami
 ``` 
 libraryDependencies += "io.github.ollls" %% "zio-quartz-h2" % "0.5.1"
 ```
-* 0.4.3 template example: client/server (quartz-h2 HTTP/2 client only supports TLS with ALPN H2 HTTP/2 hosts), `sbt run`<br>
+* 0.5.1 template example: client/server (quartz-h2 HTTP/2 client only supports TLS with ALPN H2 HTTP/2 hosts), `sbt run`<br>
 https://github.com/ollls/zio-quartz-demo
 * Template project with use cases, `sbt run`:<br>https://github.com/ollls/zio-qh2-examples
 * Use cases:<br> https://github.com/ollls/zio-quartz-h2/blob/master/examples/IO/src/main/scala/Run.scala, to run: `sbt IO/run`
