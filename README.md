@@ -2,7 +2,7 @@
 
 [![Generic badge](https://img.shields.io/badge/zio--quartz--h2-0.5.1-blue)](https://repo1.maven.org/maven2/io/github/ollls/zio-quartz-h2_3/0.5.1)
 
-# Asyncronous Java NIO **http/2 TLS** packet streaming server/client.
+# Asyncronous Java NIO **http/2 TLS** packet streaming server/client, now with HTTP1.1!
 
 ZIO2 native, asyncronous, Java NIO based implementation of http/2 packet streaming server with TLS encryption implemented as scala ZIO2 effect with ALPN h2 tag. Direct native translation of ZIO ZStream chunks into http2 packets (inbound and outbound). Tested and optimized to produce highest possible TPS. Server supports http multipart with ZStream interface along with automatic saving of files for file based multipart uploads.
 
