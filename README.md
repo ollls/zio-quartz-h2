@@ -14,7 +14,7 @@ libraryDependencies += "io.github.ollls" %% "zio-quartz-h2" % "0.5.1"
 https://github.com/ollls/zio-quartz-demo
 * Template project with use cases, `sbt run`:<br>https://github.com/ollls/zio-qh2-examples
 * Use cases:<br> https://github.com/ollls/zio-quartz-h2/blob/master/examples/IO/src/main/scala/Run.scala, to run: `sbt IO/run`
-* To debug: switch to "debug" or 'trace" in logback-test.xml, use "off" or "error" for performace tests with wrk and h2load. 
+* To debug: switch to "debug" or 'trace" in logback-test.xml, *use "off" or "error" for performace tests with wrk and h2load*. 
 * You may look at the quartz-h2 CATS port https://github.com/ollls/quartz-h2
 <br>
 
