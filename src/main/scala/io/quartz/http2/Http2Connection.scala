@@ -30,20 +30,20 @@ import io.quartz.http2.routes.HttpRoute
 
 object Http2Connection {
 
-  val FAST_MODE = true
-
   private[this] def outBoundWorkerProc(
       ch: IOChannel,
       outq: Queue[ByteBuffer],
-      shutdown: Promise[Throwable, Boolean]
+      shutdownPromise: Promise[Throwable, Boolean]
   ): Task[Boolean] = {
-    for {
+    (for {
       bb <- outq.take
-      res <- if (bb == null) ZIO.succeed(true) else ZIO.succeed(false)
-      _ <- ZIO.when(res == false)(ch.write(bb))
-      _ <- ZIO.when(res == true)(ZIO.logDebug("Shutdown outbound H2 packet sender"))
-      _ <- ZIO.when(res == true)(shutdown.succeed(true))
-    } yield (res)
+      // empty array is a termination signal
+      _ <- ZIO.when(bb.array().length == 0)(ZIO.fail(new Exception("Shutdown outbound H2 packet sender")))
+      _ <- ch.write(bb)
+    } yield (true)).catchAll(e =>
+      ZIO.logDebug("outBoundWorkerProc fiber: " + e.toString()) *> outq.shutdown *> shutdownPromise.succeed(true) *> ZIO
+        .succeed(false)
+    )
   }
 
   def make[Env](
@@ -59,8 +59,9 @@ object Http2Connection {
       _ <- ZIO.logDebug("Http2Connection.make()")
       shutdownPromise <- Promise.make[Throwable, Boolean]
 
-      outq <- Queue.bounded[ByteBuffer](1)
-      outDataQEventQ <- Queue.unbounded[Boolean]
+      //1024 for performance
+      outq <- Queue.bounded[ByteBuffer](1024)
+
       http11Req_ref <- Ref.make[Option[Request]](http11request)
       hSem <- Semaphore.make(permits = 1)
 
@@ -70,8 +71,7 @@ object Http2Connection {
       globalBytesOfPendingInboundData <- Ref.make(0)
 
       runMe2 = outBoundWorkerProc(ch, outq, shutdownPromise)
-        .catchAll(e => ZIO.logDebug("outBoundWorkerProc fiber: " + e.toString()))
-        .repeatUntil(_ == true)
+        .repeatUntil(_ == false)
         .fork
 
       _ <- runMe2
@@ -83,7 +83,6 @@ object Http2Connection {
           httpRoute,
           http11Req_ref,
           outq,
-          outDataQEventQ,
           globalTransmitWindow,
           globalBytesOfPendingInboundData,
           globalInboundWindow,
@@ -94,14 +93,6 @@ object Http2Connection {
           in_winSize
         )
       )
-      runMe = c.streamDataOutWorker
-        .catchAll(e => ZIO.logError("streamDataOutWorker fiber: " + e.toString()))
-        .repeatUntil(_ == true)
-        .fork
-
-      _ <- runMe
-
-      _ <- ZIO.logTrace("Http2Connection.make() - Start data worker")
 
     } yield c
   }
@@ -275,7 +266,6 @@ case class Http2Stream(
     header: ArrayBuffer[ByteBuffer],
     trailing_header: ArrayBuffer[ByteBuffer],
     inDataQ: Queue[ByteBuffer], // accumulate data packets in stream function
-    outDataQ: Queue[ByteBuffer], // priority outbound queue for all data frames, scanned by one thread
     outXFlowSync: Queue[Unit], // flow control sync queue for data frames
     transmitWindow: Ref[Long],
     syncUpdateWindowQ: Queue[Unit],
@@ -297,7 +287,6 @@ class Http2Connection[Env](
     httpRoute: HttpRoute[Env],
     httpReq11: Ref[Option[Request]],
     outq: Queue[ByteBuffer],
-    outDataQEventQ: Queue[Boolean],
     globalTransmitWindow: Ref[Long],
     val globalBytesOfPendingInboundData: Ref[Int], // metric
     val globalInboundWindow: Ref[Int],
@@ -331,61 +320,12 @@ class Http2Connection[Env](
   private[this] def incrementGlobalPendingInboundData(increment: Int) =
     globalBytesOfPendingInboundData.update(_ + increment)
 
-  def shutdown: Task[Unit] =
-    ZIO.logInfo("Http2Connection.shutdown") *> outDataQEventQ.offer(true) *> outq.offer(null) *> shutdownD.await.unit
-
-  //////////////////////////////////////////
-  private[this] def streamDataOutBoundProcessor(streamId: Int, c: Http2Stream): Task[Unit] = {
-    for {
-      isEmpty <- c.outDataQ.isEmpty
-      bb <- if (!isEmpty) c.outDataQ.take else ZIO.succeed(null) // null to None
-      opt <- ZIO.succeed(Option(bb))
-
-      res <- opt match {
-        case Some(data_frame) =>
-          for {
-            t <- ZIO.attempt(Http2Connection.parseFrame(data_frame))
-            // len = t._1
-            // frameType = t._2
-            flags = t._3
-            // streamId = t._4
-            _ <- this.sendFrame(data_frame)
-            x <- outDataQEventQ.take
-            _ <- outDataQEventQ.take.when(
-              x == true
-            )
-            _ <- ZIO.when(x == true)(
-              outDataQEventQ
-                .offer(true)
-            )
-
-            _ <- c.done.succeed(()).when(Flags.END_STREAM(flags) == true)
-
-          } yield ()
-
-        case None =>
-          for {
-            _ <- ZIO.unit
-
-          } yield ()
-      }
-    } yield ()
-
-  }
-
-  //////////////////////////////////////////
-  private[this] def streamDataOutWorker: Task[Boolean] = {
-    for {
-      x <- outDataQEventQ.take
-      _ <- outDataQEventQ.offer(x)
-
-      // _ <- this.streamTbl.iterator.toSeq.foldMap[Task[Unit]](c => streamDataOutBoundProcessor(c._1, c._2))
-      _ <- ZIO.foreach(this.streamTbl.iterator.toSeq)(c => streamDataOutBoundProcessor(c._1, c._2))
-
-      _ <- ZIO.when(x == true)(ZIO.logDebug("Shutdown H2 outbound data packet priority manager"))
-
-    } yield (x)
-  }
+  def shutdown: Task[Unit] = for {
+    qShutdown <- outq.isShutdown
+    _ <- ZIO.when(qShutdown == false)(outq.offer(ByteBuffer.allocate(0)))
+    _ <- shutdownD.await.unit
+    _ <- ZIO.logError("Http2Connection.shutdown")
+  } yield ()
 
   /*
     When the value of SETTINGS_INITIAL_WINDOW_SIZE changes, a receiver MUST adjust
@@ -533,7 +473,6 @@ class Http2Connection[Env](
           header,
           trailing_header,
           inDataQ = dataIn,
-          outDataQ = dataOut,
           outXFlowSync = xFlowSync,
           transmitWindow,
           updSyncQ,
@@ -593,7 +532,6 @@ class Http2Connection[Env](
           header,
           trailing_header,
           inDataQ = dataIn,
-          outDataQ = dataOut,
           outXFlowSync = xFlowSync,
           transmitWindow,
           updSyncQ,
@@ -811,10 +749,7 @@ class Http2Connection[Env](
           (for {
             rlen <- ZIO.succeed(Math.min(bytesCredit, data_len))
             frames <- ZIO.attempt(splitDataFrames(bb, rlen))
-            _ <-
-              if (Http2Connection.FAST_MODE == true) sendFrame(frames._1.buffer)
-              else stream.outDataQ.offer(frames._1.buffer) *> outDataQEventQ.offer(false)
-
+            _ <- sendFrame(frames._1.buffer)
             _ <- globalTransmitWindow.update(_ - rlen)
             _ <- stream.transmitWindow.update(_ - rlen)
 
@@ -966,7 +901,6 @@ class Http2Connection[Env](
 
   def closeStream(streamId: Int): Task[Unit] = {
     for {
-      _ <- ZIO.when(Http2Connection.FAST_MODE == false)(updateStreamWith(12, streamId, c => c.done.await))
       _ <- ZIO.succeed(concurrentStreams.decrementAndGet())
       _ <- ZIO.attempt(streamTbl.remove(streamId))
       _ <- ZIO.logDebug(s"Close stream: $streamId")

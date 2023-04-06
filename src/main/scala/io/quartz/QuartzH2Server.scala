@@ -116,6 +116,8 @@ class QuartzH2Server[Env](
   val MAX_HTTP_HEADER_SZ = 16384
   val HTTP1_KEEP_ALIVE_MS = 20000
 
+  var shutdown = false
+
   // val HOST = "localhost"
   // val PORT = 8443
   // val SERVER = "127.0.0.1"
@@ -128,9 +130,8 @@ class QuartzH2Server[Env](
       .addShutdownHook(new Thread {
         override def run = {
           println("abort")
-          s0.close()
-          group.shutdownNow()
-          Runtime.getRuntime().halt(0);
+          //for async wait this is all we need
+          shutdown = true
         }
       })
   )
@@ -141,7 +142,10 @@ class QuartzH2Server[Env](
       .addShutdownHook(new Thread {
         override def run = {
           println("abort2")
-          s0.close()
+          shutdown = true
+          /* blockig socket will need one
+           * last connection to process a shutdown flag */
+          /* ZIO context not available here hard, we just halt the jvm for now*/
           Runtime.getRuntime().halt(0);
         }
       })
@@ -404,7 +408,7 @@ class QuartzH2Server[Env](
           }.fork
         )
         .catchAll(e => errorHandler(e).ignore)
-        .forever
+        .repeatUntil( _ => shutdown)
 
     } yield (ExitCode.success)
   }
@@ -454,7 +458,7 @@ class QuartzH2Server[Env](
           }.fork
         )
         .catchAll(e => errorHandler(e).ignore)
-        .forever
+        .repeatUntil( _ => shutdown)
     } yield (ExitCode.success)
   }
 
@@ -504,7 +508,7 @@ class QuartzH2Server[Env](
           }.fork
         )
         .catchAll(e => errorHandler(e).ignore)
-        .forever
+        .repeatUntil( _ => shutdown)
 
     } yield (ExitCode.success)
   }
