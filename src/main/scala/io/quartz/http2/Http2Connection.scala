@@ -59,7 +59,7 @@ object Http2Connection {
       _ <- ZIO.logDebug("Http2Connection.make()")
       shutdownPromise <- Promise.make[Throwable, Boolean]
 
-      //1024 for performance
+      // 1024 for performance
       outq <- Queue.bounded[ByteBuffer](1024)
 
       http11Req_ref <- Ref.make[Option[Request]](http11request)
@@ -109,6 +109,46 @@ object Http2Connection {
   }
 
   private[this] def dataEvalEffectProducer[Env](
+      c: Http2Connection[Env],
+      q: Queue[ByteBuffer]
+  ): Task[ByteBuffer] = {
+
+    for {
+      bb <- q.take
+      _ <- ZIO.when(bb == null)(ZIO.fail(java.nio.channels.ClosedChannelException()))
+      tp <- ZIO.attempt(parseFrame(bb))
+      streamId = tp._4
+      len = tp._1
+
+      o_stream <- ZIO.attempt(c.streamTbl.get(streamId))
+      _ <- ZIO.when(o_stream.isEmpty)(ZIO.fail(ErrorGen(streamId, Error.FRAME_SIZE_ERROR, "invalid stream id")))
+      stream <- ZIO.attempt(o_stream.get)
+      //////////////////////////////////////////////////////////////////////////////////////////////////////////
+      bytes_pending <- c.globalBytesOfPendingInboundData.get
+      bytes_available <- c.globalInboundWindow.get
+      _ <- c
+        .sendFrame(Frames.mkWindowUpdateFrame(0, bytes_available))
+        .when(
+          bytes_pending < c.INITIAL_WINDOW_SIZE * 0.3 && bytes_available < c.INITIAL_WINDOW_SIZE * 0.3
+        )
+      _ <- c.globalInboundWindow.update(_ - len)
+      _ <- c.globalBytesOfPendingInboundData.update(_ - len)
+      ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+      bytes_pending_stream <- stream.bytesOfPendingInboundData.get
+      bytes_available_stream <- stream.inboundWindow.get
+      _ <- c
+        .sendFrame(Frames.mkWindowUpdateFrame(streamId, bytes_available_stream.toInt))
+        .when(
+          bytes_pending_stream < c.INITIAL_WINDOW_SIZE * 0.3 && bytes_available_stream < c.INITIAL_WINDOW_SIZE * 0.3
+        )
+      _ <- stream.inboundWindow.update(_ - len)
+      _ <- stream.bytesOfPendingInboundData.update(_ - len)
+
+    } yield (bb)
+
+  }
+
+  private[this] def dataEvalEffectProducer2[Env](
       c: Http2Connection[Env],
       q: Queue[ByteBuffer]
   ): Task[ByteBuffer] = {
@@ -618,11 +658,11 @@ class Http2Connection[Env](
       c <- ZIO.attempt(o_c.get)
       _ <- ZIO.succeed(c.contentLenFromDataFrames += dataSize)
 
-      localWin_sz <- c.inboundWindow.get
-      _ <- this.globalInboundWindow.update(_ - dataSize) *>
-        this.incrementGlobalPendingInboundData(dataSize) *>
-        c.inboundWindow.update(_ - dataSize) *>
-        c.bytesOfPendingInboundData.update(_ + dataSize)
+      // localWin_sz <- c.inboundWindow.get
+      // _ <- this.globalInboundWindow.update(_ - dataSize) *>
+      _ <- this.incrementGlobalPendingInboundData(dataSize)
+      //  c.inboundWindow.update(_ - dataSize) *>
+      _ <- c.bytesOfPendingInboundData.update(_ + dataSize)
 
       _ <- c.inDataQ.offer(bb)
 
