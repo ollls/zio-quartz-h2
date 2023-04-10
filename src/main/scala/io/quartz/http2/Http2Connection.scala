@@ -30,6 +30,8 @@ import io.quartz.http2.routes.HttpRoute
 
 object Http2Connection {
 
+  val STREAMTBL_PURGE_DELAY = 320 // 320 last streams will be recognozable while in closed state
+
   private[this] def outBoundWorkerProc(
       ch: IOChannel,
       outq: Queue[ByteBuffer],
@@ -284,7 +286,7 @@ class Http2Connection[Env](
   var concurrentStreams = new AtomicInteger(0)
 
   val streamTbl = java.util.concurrent.ConcurrentHashMap[Int, Http2Stream](100).asScala
-  def getStream( id : Int ) : Option[Http2StreamCommon] = streamTbl.get(id)
+  def getStream(id: Int): Option[Http2StreamCommon] = streamTbl.get(id)
 
   var start = true
   // streamID of the header which is currently fetching from remote, any other header will trigger GoAway
@@ -704,7 +706,7 @@ class Http2Connection[Env](
     val flags = bb.get()
     val streamId = Frames.getStreamId(bb)
 
-    val endStream = if ( (flags & Flags.END_STREAM) != 0 ) true else false
+    val endStream = if ((flags & Flags.END_STREAM) != 0) true else false
 
     if (requiredLen < len) {
       val buf0 = Array.ofDim[Byte](requiredLen.toInt)
@@ -885,7 +887,7 @@ class Http2Connection[Env](
   def closeStream(streamId: Int): Task[Unit] = {
     for {
       _ <- ZIO.succeed(concurrentStreams.decrementAndGet())
-      _ <- ZIO.attempt(streamTbl.remove(streamId - 320))
+      _ <- ZIO.attempt(streamTbl.remove(streamId - Http2Connection.STREAMTBL_PURGE_DELAY))
       _ <- ZIO.logDebug(s"Close stream: $streamId")
     } yield ()
 
