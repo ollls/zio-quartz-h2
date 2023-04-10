@@ -66,9 +66,9 @@ object Http2Connection {
       hSem <- Semaphore.make(permits = 1)
 
       globalTransmitWindow <- Ref.make[Long](65535)
-      globalInboundWindow <- Ref.make(65535)
+      globalInboundWindow <- Ref.make[Long](65535)
 
-      globalBytesOfPendingInboundData <- Ref.make(0)
+      globalBytesOfPendingInboundData <- Ref.make(0L)
 
       runMe2 = outBoundWorkerProc(ch, outq, shutdownPromise)
         .repeatUntil(_ == false)
@@ -97,6 +97,26 @@ object Http2Connection {
     } yield c
   }
 
+  private[this] def windowsUpdate[Env](
+      c: Http2ConnectionCommon,
+      streamId: Int,
+      received: Ref[Long],
+      window: Ref[Long]
+  ) =
+    for {
+      bytes_received <- received.get
+      bytes_available <- window.get
+      send_update <- ZIO.succeed(
+        bytes_received < c.INITIAL_WINDOW_SIZE * 0.7 && bytes_available < c.INITIAL_WINDOW_SIZE * 0.3
+      )
+      upd = c.INITIAL_WINDOW_SIZE - bytes_available.toInt
+      _ <- ZIO.when(send_update)(
+        c.sendFrame(Frames.mkWindowUpdateFrame(streamId, upd)) *> window.update(_ + upd) *> ZIO.logDebug(
+          s"Send UPDATE_WINDOW $upd streamId= $streamId"
+        )
+      )
+    } yield (send_update)
+
   private[this] def parseFrame(bb: ByteBuffer) = {
     val sbb = bb.slice();
 
@@ -108,8 +128,8 @@ object Http2Connection {
     (len, frameType, flags, streamId)
   }
 
-  private[this] def dataEvalEffectProducer[Env](
-      c: Http2Connection[Env],
+  def dataEvalEffectProducer[Env](
+      c: Http2ConnectionCommon,
       q: Queue[ByteBuffer]
   ): Task[ByteBuffer] = {
 
@@ -119,109 +139,18 @@ object Http2Connection {
       tp <- ZIO.attempt(parseFrame(bb))
       streamId = tp._4
       len = tp._1
-
-      o_stream <- ZIO.attempt(c.streamTbl.get(streamId))
+      o_stream <- ZIO.attempt(c.getStream((streamId)))
       _ <- ZIO.when(o_stream.isEmpty)(ZIO.fail(ErrorGen(streamId, Error.FRAME_SIZE_ERROR, "invalid stream id")))
-      stream <- ZIO.attempt(o_stream.get)
+      stream: Http2StreamCommon <- ZIO.attempt(o_stream.get)
       //////////////////////////////////////////////////////////////////////////////////////////////////////////
-      bytes_pending <- c.globalBytesOfPendingInboundData.get
-      bytes_available <- c.globalInboundWindow.get
-      _ <- c
-        .sendFrame(Frames.mkWindowUpdateFrame(0, bytes_available))
-        .when(
-          bytes_pending < c.INITIAL_WINDOW_SIZE * 0.3 && bytes_available < c.INITIAL_WINDOW_SIZE * 0.3
-        )
-      _ <- c.globalInboundWindow.update(_ - len)
+
+      _ <- windowsUpdate[Env](c, 0, c.globalBytesOfPendingInboundData, c.globalInboundWindow)
       _ <- c.globalBytesOfPendingInboundData.update(_ - len)
+      _ <- c.globalInboundWindow.update(_ - len)
       ///////////////////////////////////////////////////////////////////////////////////////////////////////////
-      bytes_pending_stream <- stream.bytesOfPendingInboundData.get
-      bytes_available_stream <- stream.inboundWindow.get
-      _ <- c
-        .sendFrame(Frames.mkWindowUpdateFrame(streamId, bytes_available_stream.toInt))
-        .when(
-          bytes_pending_stream < c.INITIAL_WINDOW_SIZE * 0.3 && bytes_available_stream < c.INITIAL_WINDOW_SIZE * 0.3
-        )
-      _ <- stream.inboundWindow.update(_ - len)
+      _ <- windowsUpdate[Env](c, streamId, stream.bytesOfPendingInboundData, stream.inboundWindow)
       _ <- stream.bytesOfPendingInboundData.update(_ - len)
-
-    } yield (bb)
-
-  }
-
-  private[this] def dataEvalEffectProducer2[Env](
-      c: Http2Connection[Env],
-      q: Queue[ByteBuffer]
-  ): Task[ByteBuffer] = {
-    for {
-      bb <- q.take
-      _ <- ZIO.when(bb == null)(ZIO.fail(java.nio.channels.ClosedChannelException()))
-      tp <- ZIO.attempt(parseFrame(bb))
-      streamId = tp._4
-      len = tp._1
-
-      o_stream <- ZIO.attempt(c.streamTbl.get(streamId))
-      _ <- ZIO.when(o_stream.isEmpty)(ZIO.fail(ErrorGen(streamId, Error.FRAME_SIZE_ERROR, "invalid stream id")))
-      stream <- ZIO.attempt(o_stream.get)
-
-      ////////////////////////////////////////////////
-      // global counter with Window Update.
-      // now we track both global and local during request.stream processing
-      // globalBytesOfPendingInboundData shared reference betweem streams
-      //////////////////////////////////////////////
-      _ <- c.decrementGlobalPendingInboundData(len)
-      bytes_pending <- c.globalBytesOfPendingInboundData.get
-      bytes_available <- c.globalInboundWindow.get
-      globalWinIncrement <- ZIO.succeed {
-        if (c.INITIAL_WINDOW_SIZE > bytes_pending) c.INITIAL_WINDOW_SIZE - bytes_pending
-        else c.INITIAL_WINDOW_SIZE
-      }
-      _ <- c
-        .sendFrame(Frames.mkWindowUpdateFrame(0, globalWinIncrement))
-        .when(globalWinIncrement > c.INITIAL_WINDOW_SIZE * 0.7 && bytes_available < c.INITIAL_WINDOW_SIZE * 0.3)
-
-      _ <- ZIO.when(globalWinIncrement > c.INITIAL_WINDOW_SIZE * 0.7 && bytes_available < c.INITIAL_WINDOW_SIZE * 0.3)(
-        c.globalInboundWindow
-          .update(_ + globalWinIncrement)
-      )
-
-      _ <- ZIO.when(globalWinIncrement > c.INITIAL_WINDOW_SIZE * 0.7 && bytes_available < c.INITIAL_WINDOW_SIZE * 0.3)(
-        ZIO.logDebug(s"Send WINDOW UPDATE global $globalWinIncrement $bytes_available")
-      )
-
-      //////////////////////////////////////////////
-      // local counter
-      _ <- c.updateStreamWith(
-        0,
-        streamId,
-        c => c.bytesOfPendingInboundData.update(_ - len)
-      )
-
-      bytes_available_per_stream <- stream.inboundWindow.get
-
-      bytes_pending_per_stream <- c.globalBytesOfPendingInboundData.get
-      streamWinIncrement <- ZIO.succeed {
-        if (c.INITIAL_WINDOW_SIZE > bytes_pending_per_stream) c.INITIAL_WINDOW_SIZE - bytes_pending_per_stream
-        else c.INITIAL_WINDOW_SIZE
-      }
-      _ <-
-        if (
-          streamWinIncrement > c.INITIAL_WINDOW_SIZE * 0.7 && bytes_available_per_stream < c.INITIAL_WINDOW_SIZE * 0.3
-        ) {
-          ZIO.logDebug(
-            s"Send WINDOW UPDATE local on processing incoming data=$streamWinIncrement localWin=$bytes_available_per_stream"
-          ) *> c
-            .sendFrame(
-              Frames.mkWindowUpdateFrame(
-                streamId,
-                if (streamWinIncrement > 0) streamWinIncrement else c.INITIAL_WINDOW_SIZE
-              )
-            ) *>
-            stream.inboundWindow.update(_ + streamWinIncrement)
-        } else {
-          ZIO.logTrace(
-            ">>>>>>>>>> still processing incoming data, pause remote, pending data = " + bytes_pending_per_stream
-          ) *> ZIO.unit
-        }
+      _ <- stream.inboundWindow.update(_ - len)
 
     } yield (bb)
   }
@@ -300,25 +229,36 @@ object Http2Connection {
   }
 }
 
-case class Http2Stream(
+trait Http2StreamCommon(val bytesOfPendingInboundData: Ref[Long], val inboundWindow: Ref[Long])
+
+class Http2Stream(
     active: Ref[Boolean],
-    d: Promise[Throwable, Headers],
-    header: ArrayBuffer[ByteBuffer],
-    trailing_header: ArrayBuffer[ByteBuffer],
-    inDataQ: Queue[ByteBuffer], // accumulate data packets in stream function
-    outXFlowSync: Queue[Unit], // flow control sync queue for data frames
-    transmitWindow: Ref[Long],
+    val d: Promise[Throwable, Headers],
+    val header: ArrayBuffer[ByteBuffer],
+    val trailing_header: ArrayBuffer[ByteBuffer],
+    val inDataQ: Queue[ByteBuffer], // accumulate data packets in stream function
+    val outXFlowSync: Queue[Unit], // flow control sync queue for data frames
+    val transmitWindow: Ref[Long],
     syncUpdateWindowQ: Queue[Unit],
-    bytesOfPendingInboundData: Ref[Int], // metric
+    bytesOfPendingInboundData: Ref[Long],
     inboundWindow: Ref[Long],
-    contentLenFromHeader: Promise[Throwable, Option[Int]],
-    trailingHeader: Promise[Throwable, Headers],
-    done: Promise[Throwable, Unit]
-) {
+    val contentLenFromHeader: Promise[Throwable, Option[Int]],
+    val trailingHeader: Promise[Throwable, Headers],
+    val done: Promise[Throwable, Unit]
+) extends Http2StreamCommon(bytesOfPendingInboundData, inboundWindow) {
   var endFlag = false // half-closed if true
   var endHeadersFlag = false
   var contentLenFromDataFrames = 0
 
+}
+
+trait Http2ConnectionCommon(
+    val INITIAL_WINDOW_SIZE: Int,
+    val globalBytesOfPendingInboundData: Ref[Long],
+    val globalInboundWindow: Ref[Long]
+) {
+  def sendFrame(b: ByteBuffer): zio.UIO[Boolean]
+  def getStream(id: Int): Option[Http2StreamCommon]
 }
 
 class Http2Connection[Env](
@@ -328,20 +268,23 @@ class Http2Connection[Env](
     httpReq11: Ref[Option[Request]],
     outq: Queue[ByteBuffer],
     globalTransmitWindow: Ref[Long],
-    val globalBytesOfPendingInboundData: Ref[Int], // metric
-    val globalInboundWindow: Ref[Int],
+    globalBytesOfPendingInboundData: Ref[Long],
+    globalInboundWindow: Ref[Long],
     shutdownD: Promise[Throwable, Boolean],
     hSem: Semaphore,
     MAX_CONCURRENT_STREAMS: Int,
     HTTP2_KEEP_ALIVE_MS: Int,
-    val INITIAL_WINDOW_SIZE: Int
-) {
+    INITIAL_WINDOW_SIZE: Int
+) extends Http2ConnectionCommon(INITIAL_WINDOW_SIZE, globalBytesOfPendingInboundData, globalInboundWindow) {
 
   val settings: Http2Settings = new Http2Settings()
   val settings_client = new Http2Settings()
   var settings_done = false
 
   var concurrentStreams = new AtomicInteger(0)
+
+  val streamTbl = java.util.concurrent.ConcurrentHashMap[Int, Http2Stream](100).asScala
+  def getStream( id : Int ) : Option[Http2StreamCommon] = streamTbl.get(id)
 
   var start = true
   // streamID of the header which is currently fetching from remote, any other header will trigger GoAway
@@ -350,8 +293,6 @@ class Http2Connection[Env](
 
   val headerEncoder = new HeaderEncoder(settings.HEADER_TABLE_SIZE)
   val headerDecoder = new HeaderDecoder(settings.MAX_HEADER_LIST_SIZE, settings.HEADER_TABLE_SIZE)
-
-  val streamTbl = java.util.concurrent.ConcurrentHashMap[Int, Http2Stream](100).asScala
 
   // var statRefresh = 0
 
@@ -503,7 +444,7 @@ class Http2Connection[Env](
       )
 
       updSyncQ <- Queue.dropping[Unit](1)
-      pendingInBytes <- Ref.make(0)
+      pendingInBytes <- Ref.make(0L)
       active <- Ref.make(true)
 
       c <- ZIO.attempt(
@@ -561,7 +502,7 @@ class Http2Connection[Env](
       )
 
       updSyncQ <- Queue.dropping[Unit](1)
-      pendingInBytes <- Ref.make(0)
+      pendingInBytes <- Ref.make(0L)
 
       active <- Ref.make(true)
 
@@ -763,12 +704,14 @@ class Http2Connection[Env](
     val flags = bb.get()
     val streamId = Frames.getStreamId(bb)
 
+    val endStream = if ( (flags & Flags.END_STREAM) != 0 ) true else false
+
     if (requiredLen < len) {
       val buf0 = Array.ofDim[Byte](requiredLen.toInt)
       bb.get(buf0)
 
       val dataFrame1 = Frames.mkDataFrame(streamId, false, padding = 0, ByteBuffer.wrap(buf0))
-      val dataFrame2 = Frames.mkDataFrame(streamId, false, padding = 0, bb)
+      val dataFrame2 = Frames.mkDataFrame(streamId, endStream, padding = 0, bb)
 
       (
         txWindow_SplitDataFrame(dataFrame1, requiredLen.toInt),
@@ -820,7 +763,7 @@ class Http2Connection[Env](
       }
     } yield ()
 
-  def sendFrame(b: => ByteBuffer) = outq.offer(b)
+  def sendFrame(b: ByteBuffer) = outq.offer(b)
 
   ////////////////////////////////////////////
 
@@ -942,7 +885,7 @@ class Http2Connection[Env](
   def closeStream(streamId: Int): Task[Unit] = {
     for {
       _ <- ZIO.succeed(concurrentStreams.decrementAndGet())
-      _ <- ZIO.attempt(streamTbl.remove(streamId))
+      _ <- ZIO.attempt(streamTbl.remove(streamId - 320))
       _ <- ZIO.logDebug(s"Close stream: $streamId")
     } yield ()
 
