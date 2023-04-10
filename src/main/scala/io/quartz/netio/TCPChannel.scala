@@ -160,6 +160,6 @@ class TCPChannel(val ch: AsynchronousSocketChannel) extends IOChannel {
 
   def remoteAddress(): Task[SocketAddress] = ZIO.attempt(ch.getRemoteAddress())
 
-  def secure = false
+  def secure() = false
 
 }

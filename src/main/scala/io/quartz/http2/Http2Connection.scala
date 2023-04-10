@@ -540,6 +540,8 @@ class Http2Connection[Env](
             if ((flags & Flags.END_STREAM) == Flags.END_STREAM) {
               ZStream.empty
             } else Http2Connection.makeDataStream(this, dataIn),
+            ch.secure(),
+            ch.sniServerNames(),
             trailingHdr
           )
         )
@@ -1361,7 +1363,7 @@ class Http2Connection[Env](
                         val stream = x.stream
                         val th = x.trailingHeaders
                         val h = x.headers.drop("connection")
-                        this.openStream11(1, Request(id, 1, h, stream, th))
+                        this.openStream11(1, Request(id, 1, h, stream, ch.secure(), ch.sniServerNames(), th))
                       }
                       case None => ZIO.unit
                     })

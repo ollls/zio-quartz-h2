@@ -130,7 +130,7 @@ class QuartzH2Server[Env](
       .addShutdownHook(new Thread {
         override def run = {
           println("abort")
-          //for async wait this is all we need
+          // for async wait this is all we need
           shutdown = true
         }
       })
@@ -240,7 +240,7 @@ class QuartzH2Server[Env](
     _ <- ZIO.logTrace("doConnectUpgrade()")
 
     hdrb_body <- Utils.splitHeadersAndBody(ch, buf)
-    hdr_body <- Utils.getHttpHeaderAndLeftover(hdrb_body._1, ch.secure)
+    hdr_body <- Utils.getHttpHeaderAndLeftover(hdrb_body._1, ch.secure())
 
     leftover = hdrb_body._2
     headers11 = hdr_body._1
@@ -256,7 +256,7 @@ class QuartzH2Server[Env](
 
     emptyTH <- Promise.make[Throwable, Headers] // no trailing headers for 1.1
     _ <- emptyTH.succeed(Headers()) // complete with empty
-    http11request <- ZIO.attempt(Some(Request(id, 1, headers11, res, emptyTH)))
+    http11request <- ZIO.attempt(Some(Request(id, 1, headers11, res, ch.secure(), ch.sniServerNames(), emptyTH)))
     upd = headers11.get("upgrade").getOrElse("<N/A>")
     _ <- ZIO.logTrace("doConnectUpgrade() - Upgrade = " + upd)
     _ <-
@@ -408,7 +408,7 @@ class QuartzH2Server[Env](
           }.fork
         )
         .catchAll(e => errorHandler(e).ignore)
-        .repeatUntil( _ => shutdown)
+        .repeatUntil(_ => shutdown)
 
     } yield (ExitCode.success)
   }
@@ -458,7 +458,7 @@ class QuartzH2Server[Env](
           }.fork
         )
         .catchAll(e => errorHandler(e).ignore)
-        .repeatUntil( _ => shutdown)
+        .repeatUntil(_ => shutdown)
     } yield (ExitCode.success)
   }
 
@@ -508,7 +508,7 @@ class QuartzH2Server[Env](
           }.fork
         )
         .catchAll(e => errorHandler(e).ignore)
-        .repeatUntil( _ => shutdown)
+        .repeatUntil(_ => shutdown)
 
     } yield (ExitCode.success)
   }
