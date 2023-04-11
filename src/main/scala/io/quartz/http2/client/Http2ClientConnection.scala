@@ -456,6 +456,7 @@ class Http2ClientConnection(
 
   def close() = for {
     _ <- outBoundFiber.interrupt
+     _ <- ch.close()
   } yield ()
 
   def doDelete(
