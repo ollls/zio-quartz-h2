@@ -1,6 +1,7 @@
 <img src="quartz-h2.jpeg" width="84" title="quartz-h2"/>
 
 [![Generic badge](https://img.shields.io/badge/zio--quartz--h2-0.5.3-blue)](https://repo1.maven.org/maven2/io/github/ollls/zio-quartz-h2_3/0.5.3)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=ollls_zio-quartz-h2&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=ollls_zio-quartz-h2)
 
 # Asyncronous Java NIO **http/2 TLS** packet streaming server/client.
 It's now with HTTP/1.1, check 0.5.3 release notes.
