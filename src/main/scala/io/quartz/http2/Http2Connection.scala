@@ -105,11 +105,12 @@ object Http2Connection {
       c: Http2ConnectionCommon,
       streamId: Int,
       received: Ref[Long],
-      window: Ref[Long]
+      window: Ref[Long],
+      len : Int
   ) =
     for {
-      bytes_received <- received.get
-      bytes_available <- window.get
+      bytes_received <- received.getAndUpdate(_ - len)
+      bytes_available <- window.getAndUpdate(_ - len)
       send_update <- ZIO.succeed(
         bytes_received < c.INITIAL_WINDOW_SIZE * 0.7 && bytes_available < c.INITIAL_WINDOW_SIZE * 0.3
       )
@@ -136,7 +137,6 @@ object Http2Connection {
       c: Http2ConnectionCommon,
       q: Queue[ByteBuffer]
   ): Task[ByteBuffer] = {
-
     for {
       bb <- q.take
       _ <- ZIO.when(bb == null)(ZIO.fail(java.nio.channels.ClosedChannelException()))
@@ -147,18 +147,8 @@ object Http2Connection {
       _ <- ZIO.when(o_stream.isEmpty)(ZIO.fail(ErrorGen(streamId, Error.FRAME_SIZE_ERROR, "invalid stream id")))
       stream: Http2StreamCommon <- ZIO.attempt(o_stream.get)
       //////////////////////////////////////////////////////////////////////////////////////////////////////////
-      _ <- ZIO.scoped {
-        c.hSem2.withPermitScoped *> (for {
-          _ <- windowsUpdate[Env](c, 0, c.globalBytesOfPendingInboundData, c.globalInboundWindow)
-          _ <- c.globalBytesOfPendingInboundData.update(_ - len)
-          _ <- c.globalInboundWindow.update(_ - len)
-        } yield ())
-      }
-      ///////////////////////////////////////////////////////////////////////////////////////////////////////////
-      _ <- windowsUpdate[Env](c, streamId, stream.bytesOfPendingInboundData, stream.inboundWindow)
-      _ <- stream.bytesOfPendingInboundData.update(_ - len)
-      _ <- stream.inboundWindow.update(_ - len)
-
+      _ <- windowsUpdate[Env](c, 0, c.globalBytesOfPendingInboundData, c.globalInboundWindow, len )
+      _ <- windowsUpdate[Env](c, streamId, stream.bytesOfPendingInboundData, stream.inboundWindow, len )
     } yield (bb)
   }
 
