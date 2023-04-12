@@ -30,7 +30,7 @@ import io.quartz.http2.routes.HttpRoute
 
 object Http2Connection {
 
-  val STREAMTBL_PURGE_DELAY = 320 // 320 last streams will be recognozable while in closed state
+  val STREAMTBL_PURGE_DELAY = 0 // 320 last streams will be recognozable while in closed state
 
   private[this] def outBoundWorkerProc(
       ch: IOChannel,
@@ -66,6 +66,7 @@ object Http2Connection {
 
       http11Req_ref <- Ref.make[Option[Request]](http11request)
       hSem <- Semaphore.make(permits = 1)
+      hSem2 <- Semaphore.make(permits = 1)
 
       globalTransmitWindow <- Ref.make[Long](65535)
       globalInboundWindow <- Ref.make[Long](65535)
@@ -90,6 +91,7 @@ object Http2Connection {
           globalInboundWindow,
           shutdownPromise,
           hSem,
+          hSem2,
           maxStreams,
           keepAliveMs,
           in_winSize
@@ -145,10 +147,13 @@ object Http2Connection {
       _ <- ZIO.when(o_stream.isEmpty)(ZIO.fail(ErrorGen(streamId, Error.FRAME_SIZE_ERROR, "invalid stream id")))
       stream: Http2StreamCommon <- ZIO.attempt(o_stream.get)
       //////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-      _ <- windowsUpdate[Env](c, 0, c.globalBytesOfPendingInboundData, c.globalInboundWindow)
-      _ <- c.globalBytesOfPendingInboundData.update(_ - len)
-      _ <- c.globalInboundWindow.update(_ - len)
+      _ <- ZIO.scoped {
+        c.hSem2.withPermitScoped *> (for {
+          _ <- windowsUpdate[Env](c, 0, c.globalBytesOfPendingInboundData, c.globalInboundWindow)
+          _ <- c.globalBytesOfPendingInboundData.update(_ - len)
+          _ <- c.globalInboundWindow.update(_ - len)
+        } yield ())
+      }
       ///////////////////////////////////////////////////////////////////////////////////////////////////////////
       _ <- windowsUpdate[Env](c, streamId, stream.bytesOfPendingInboundData, stream.inboundWindow)
       _ <- stream.bytesOfPendingInboundData.update(_ - len)
@@ -257,7 +262,8 @@ class Http2Stream(
 trait Http2ConnectionCommon(
     val INITIAL_WINDOW_SIZE: Int,
     val globalBytesOfPendingInboundData: Ref[Long],
-    val globalInboundWindow: Ref[Long]
+    val globalInboundWindow: Ref[Long],
+    val hSem2: Semaphore
 ) {
   def sendFrame(b: ByteBuffer): zio.UIO[Boolean]
   def getStream(id: Int): Option[Http2StreamCommon]
@@ -274,10 +280,11 @@ class Http2Connection[Env](
     globalInboundWindow: Ref[Long],
     shutdownD: Promise[Throwable, Boolean],
     hSem: Semaphore,
+    hSem2: Semaphore,
     MAX_CONCURRENT_STREAMS: Int,
     HTTP2_KEEP_ALIVE_MS: Int,
     INITIAL_WINDOW_SIZE: Int
-) extends Http2ConnectionCommon(INITIAL_WINDOW_SIZE, globalBytesOfPendingInboundData, globalInboundWindow) {
+) extends Http2ConnectionCommon(INITIAL_WINDOW_SIZE, globalBytesOfPendingInboundData, globalInboundWindow, hSem2) {
 
   val settings: Http2Settings = new Http2Settings()
   val settings_client = new Http2Settings()

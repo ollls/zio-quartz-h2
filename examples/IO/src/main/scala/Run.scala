@@ -93,8 +93,15 @@ object MyApp extends ZIOAppDefault {
 
     case req @ GET -> Root / "test" => ZIO.attempt(Response.Ok())
 
-    case req @ "localhost" ! GET -> Root / "snihost" =>
-      ZIO.attempt(Response.Ok().asText(s"request only for TLS SNI name = ${req.sniServerNames.get(0)}"))
+    case req @ GET -> Root / "snihost" =>
+      for {
+        _ <-
+          req.stream.runDrain // properly ignore incoming data, we must flush it, generaly if you sure there will be no data, you can ignore.
+        result_text <- ZIO.attempt(req.sniServerNames match {
+          case Some(hosts) => s"Host names in TLS SNI extension: ${hosts.mkString(",")}"
+          case None        => "No TLS SNI host names provided or unsecure connection"
+        })
+      } yield (Response.Ok().asText(result_text))
 
     case GET -> Root / "example" =>
       // how to send data in separate H2 packets of various size.

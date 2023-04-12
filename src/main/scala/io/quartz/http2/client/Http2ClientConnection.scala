@@ -68,6 +68,7 @@ object Http2ClientConnection {
       refDecoder <- Ref.make[HeaderDecoder](null)
       refsId <- Ref.make(1)
       hSem <- Semaphore.make(permits = 1)
+      hSem2 <- Semaphore.make(permits = 1)
       awaitSettings <- Promise.make[Throwable, Boolean]
       settings0 <- Ref.make(
         Http2Settings()
@@ -88,6 +89,7 @@ object Http2ClientConnection {
         outq,
         f0,
         hSem,
+        hSem2,
         awaitSettings,
         settings0,
         globalBytesOfPendingInboundData,
@@ -131,13 +133,14 @@ class Http2ClientConnection(
     outq: Queue[ByteBuffer],
     outBoundFiber: Fiber[Throwable, Nothing],
     hSem: Semaphore,
+    hSem2: Semaphore,
     awaitSettings: Promise[Throwable, Boolean],
     settings1: Ref[Http2Settings],
     globalBytesOfPendingInboundData: Ref[Long],
     inboundWindow: Ref[Long],
     transmitWindow: Ref[Long],
     INITIAL_WINDOW_SIZE: Int
-) extends Http2ConnectionCommon(INITIAL_WINDOW_SIZE, globalBytesOfPendingInboundData, inboundWindow) {
+) extends Http2ConnectionCommon(INITIAL_WINDOW_SIZE, globalBytesOfPendingInboundData, inboundWindow, hSem2) {
 
   import scala.jdk.CollectionConverters.*
   class Http2ClientStream(
