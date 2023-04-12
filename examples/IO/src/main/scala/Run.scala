@@ -111,7 +111,7 @@ object MyApp extends ZIOAppDefault {
     case GET -> Root / StringVar(file) =>
       val FOLDER_PATH = "/Users/ostrygun/web_root/"
       val FILE = s"$file"
-      val BLOCK_SIZE = 8000
+      val BLOCK_SIZE = 1024 * 14
       for {
         jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
         present <- ZIO.attempt(jpath.exists())

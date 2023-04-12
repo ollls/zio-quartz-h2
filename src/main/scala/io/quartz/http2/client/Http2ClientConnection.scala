@@ -140,7 +140,14 @@ class Http2ClientConnection(
     inboundWindow: Ref[Long],
     transmitWindow: Ref[Long],
     INITIAL_WINDOW_SIZE: Int
-) extends Http2ConnectionCommon(INITIAL_WINDOW_SIZE, globalBytesOfPendingInboundData, inboundWindow, hSem2) {
+) extends Http2ConnectionCommon(
+      INITIAL_WINDOW_SIZE,
+      globalBytesOfPendingInboundData,
+      inboundWindow,
+      transmitWindow,
+      outq,
+      hSem2
+    ) {
 
   import scala.jdk.CollectionConverters.*
   class Http2ClientStream(
@@ -149,10 +156,10 @@ class Http2ClientConnection(
       val header: ArrayBuffer[ByteBuffer],
       val inDataQ: Queue[ByteBuffer],
       inboundWindow: Ref[Long],
-      val transmitWindow: Ref[Long],
+      transmitWindow: Ref[Long],
       bytesOfPendingInboundData: Ref[Long],
-      val outXFlowSync: Queue[Unit]
-  ) extends Http2StreamCommon(bytesOfPendingInboundData, inboundWindow)
+      outXFlowSync: Queue[Unit]
+  ) extends Http2StreamCommon(bytesOfPendingInboundData, inboundWindow, transmitWindow, outXFlowSync)
 
   val streamTbl =
     java.util.concurrent.ConcurrentHashMap[Int, Http2ClientStream](100).asScala
@@ -409,21 +416,6 @@ class Http2ClientConnection(
     } yield ()
   }
 
-  /** Takes a slice of the specified length from the specified ByteBuffer.
-    *
-    * @param buf
-    *   The ByteBuffer to take the slice from.
-    * @param len
-    *   The length of the slice to take.
-    * @return
-    *   A new ByteBuffer containing the specified slice of the input ByteBuffer.
-    */
-  private def takeSlice(buf: ByteBuffer, len: Int): ByteBuffer = {
-    val head = buf.slice.limit(len)
-    buf.position(len)
-    head
-  }
-
   /** H2_ClientConnect() initiate incoming connections
     */
   def H2_ClientConnect(): Task[Http2Settings] = for {
@@ -459,7 +451,7 @@ class Http2ClientConnection(
 
   def close() = for {
     _ <- outBoundFiber.interrupt
-     _ <- ch.close()
+    _ <- ch.close()
   } yield ()
 
   def doDelete(
@@ -524,6 +516,7 @@ class Http2ClientConnection(
 
       // DATA /////
       pref <- Ref.make[Chunk[Byte]](Chunk.empty[Byte])
+      sts <- settings1.get
       streamId = stream.streamId
 
       _ <-
@@ -534,7 +527,7 @@ class Http2ClientConnection(
                 chunk0 <- pref.get
                 _ <- ZIO.when(chunk0.nonEmpty)(
                   ZIO.foreach(
-                    dataFrame(streamId, false, ByteBuffer.wrap(chunk0.toArray), settings.MAX_FRAME_SIZE - 128)
+                    dataFrame(sts, streamId, false, ByteBuffer.wrap(chunk0.toArray))
                   )(b => sendDataFrame(streamId, b))
                 )
 
@@ -546,7 +539,7 @@ class Http2ClientConnection(
       lastChunk <- pref.get
       _ <- (ZIO
         .when(endStreamInHeaders == false)(
-          ZIO.foreach(dataFrame(streamId, true, ByteBuffer.wrap(lastChunk.toArray), settings.MAX_FRAME_SIZE - 128))(b =>
+          ZIO.foreach(dataFrame(sts, streamId, true, ByteBuffer.wrap(lastChunk.toArray)))(b =>
             sendDataFrame(streamId, b)
           )
         ))
@@ -590,66 +583,6 @@ class Http2ClientConnection(
     * @param b
     *   The HTTP/2 packet to send.
     */
-  def sendFrame(b: ByteBuffer): zio.UIO[Boolean] = outq.offer(b)
-
-  /** Generate stream header frames from the provided header sequence
-    *
-    * If the compressed representation of the headers exceeds the MAX_FRAME_SIZE setting of the peer, it will be broken
-    * into a HEADERS frame and a series of CONTINUATION frames.
-    */
-  //////////////////////////////
-  private[this] def headerFrame( // TODOD pbly not working for multi-packs
-      streamId: Int,
-      settings: Http2Settings,
-      priority: Priority,
-      endStream: Boolean,
-      headerEncoder: HeaderEncoder,
-      headers: Headers
-  ): Seq[ByteBuffer] = {
-    val rawHeaders = headerEncoder.encodeHeaders(headers)
-
-    val limit = settings.MAX_FRAME_SIZE - 61
-
-    val headersPrioritySize =
-      if (priority.isDefined) 5 else 0 // priority(4) + weight(1), padding = 0
-
-    if (rawHeaders.remaining() + headersPrioritySize <= limit) {
-      val acc = new ArrayBuffer[ByteBuffer]
-      acc.addOne(
-        Frames.mkHeaderFrame(
-          streamId,
-          priority,
-          endHeaders = true,
-          endStream,
-          padding = 0,
-          rawHeaders
-        )
-      )
-
-      acc.toSeq
-    } else {
-      // need to fragment
-      val acc = new ArrayBuffer[ByteBuffer]
-
-      val headersBuf = takeSlice(rawHeaders, limit - headersPrioritySize)
-      acc += Frames.mkHeaderFrame(
-        streamId,
-        priority,
-        endHeaders = false,
-        endStream,
-        padding = 0,
-        headersBuf
-      )
-
-      while (rawHeaders.hasRemaining) {
-        val size = math.min(limit, rawHeaders.remaining)
-        val continueBuf = takeSlice(rawHeaders, size)
-        val endHeaders = !rawHeaders.hasRemaining
-        acc += Frames.mkContinuationFrame(streamId, endHeaders, continueBuf)
-      }
-      acc.toSeq
-    }
-  }
 
   private def parseFrame(bb: ByteBuffer) = {
     val sbb = bb.slice();
@@ -693,35 +626,6 @@ class Http2ClientConnection(
     } yield ()
   }
 
-  case class txWindow_SplitDataFrame(buffer: ByteBuffer, dataLen: Int)
-
-  private[this] def splitDataFrames(
-      bb: ByteBuffer,
-      requiredLen: Long
-  ): (txWindow_SplitDataFrame, Option[txWindow_SplitDataFrame]) = {
-    val original_bb = bb.slice()
-    val len = Frames.getLengthField(bb)
-    val frameType = bb.get()
-    val flags = bb.get()
-    val streamId = Frames.getStreamId(bb)
-
-    val endStream = if ((flags & Flags.END_STREAM) != 0) true else false
-
-    if (requiredLen < len) {
-      val buf0 = Array.ofDim[Byte](requiredLen.toInt)
-      bb.get(buf0)
-
-      val dataFrame1 = Frames.mkDataFrame(streamId, false, padding = 0, ByteBuffer.wrap(buf0))
-      val dataFrame2 = Frames.mkDataFrame(streamId, endStream, padding = 0, bb)
-
-      (
-        txWindow_SplitDataFrame(dataFrame1, requiredLen.toInt),
-        Some(txWindow_SplitDataFrame(dataFrame2, len - requiredLen.toInt))
-      )
-
-    } else (txWindow_SplitDataFrame(original_bb, len), None)
-  }
-
   /*
     When the value of SETTINGS_INITIAL_WINDOW_SIZE changes, a receiver MUST adjust
     the size of all stream flow-control windows that it maintains by the
@@ -737,91 +641,6 @@ class Http2ClientConnection(
     ZIO.logTrace(s"Http2Connection.upddateInitialWindowSizeAllStreams($currentSize, $newSize)") *>
       ZIO.foreach(streamTbl.values.toSeq)(stream => updateInitiallWindowSize(stream, currentSize, newSize))
   }
-
-  private[this] def txWindow_Transmit(
-      stream: Http2ClientStream,
-      bb: ByteBuffer,
-      data_len: Int
-  ): Task[Long] = {
-    for {
-      tx_g <- transmitWindow.get
-      tx_l <- stream.transmitWindow.get
-      bytesCredit <- ZIO.succeed(Math.min(tx_g, tx_l))
-
-      _ <-
-        if (bytesCredit > 0)
-          (for {
-            rlen <- ZIO.succeed(Math.min(bytesCredit, data_len))
-            frames <- ZIO.attempt(splitDataFrames(bb, rlen))
-
-            _ <- sendFrame(frames._1.buffer)
-
-            _ <- transmitWindow.update(_ - rlen)
-            _ <- stream.transmitWindow.update(_ - rlen)
-
-            _ <- frames._2 match {
-              case Some(f0) =>
-                stream.outXFlowSync.take *> txWindow_Transmit(
-                  stream,
-                  f0.buffer,
-                  f0.dataLen
-                )
-              case None => ZIO.unit
-            }
-
-          } yield ())
-        else stream.outXFlowSync.take *> txWindow_Transmit(stream, bb, data_len)
-
-    } yield (bytesCredit)
-  }
-
-  /** Generate stream data frame(s) for the specified data
-    *
-    * If the data exceeds the peers MAX_FRAME_SIZE setting, it is fragmented into a series of frames.
-    */
-  def dataFrame(
-      streamId: Int,
-      endStream: Boolean,
-      data: ByteBuffer,
-      frameSize: Int
-  ): scala.collection.immutable.Seq[ByteBuffer] = {
-    val limit = frameSize
-    // settings.MAX_FRAME_SIZE - 128
-
-    if (data.remaining <= limit) {
-
-      val acc = new ArrayBuffer[ByteBuffer]
-      acc.addOne(Frames.mkDataFrame(streamId, endStream, padding = 0, data))
-
-      acc.toSeq
-    } else { // need to fragment
-      val acc = new ArrayBuffer[ByteBuffer]
-      while (data.hasRemaining) {
-        val len = math.min(data.remaining(), limit)
-        val cur_pos = data.position()
-        val thisData = data.slice.limit(len)
-        data.position(cur_pos + len)
-        val eos = endStream && !data.hasRemaining
-        acc.addOne(Frames.mkDataFrame(streamId, eos, padding = 0, thisData))
-      }
-      acc.toSeq
-    }
-  }
-
-  private[this] def sendDataFrame(streamId: Int, bb: ByteBuffer): Task[Unit] =
-    for {
-      t <- ZIO.attempt(parseFrame(bb))
-      len = t._1
-      _ <- ZIO.logTrace(s"Client: sendDataFrame() - $len bytes")
-      opt_D <- ZIO.attempt(streamTbl.get(streamId))
-      _ <- opt_D match {
-        case Some(ce) =>
-          for {
-            _ <- txWindow_Transmit(ce, bb, len)
-          } yield ()
-        case None => ZIO.logError("Client: sendDataFrame lost streamId")
-      }
-    } yield ()
 
   private[this] def updateAndCheckGlobalTx(streamId: Int, inc: Int) = {
     for {
