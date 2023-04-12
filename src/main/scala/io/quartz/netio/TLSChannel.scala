@@ -24,7 +24,9 @@ import java.nio.channels.{
   CompletionHandler
 }
 
+import scala.collection.mutable.ListBuffer
 import javax.net.ssl.SNIServerName
+import javax.net.ssl.SNIMatcher
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 import java.security.cert.X509Certificate
@@ -120,8 +122,15 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
   // how many packets we can consume per read() call N of TLS_PACKET_SZ  -> N of APP_PACKET_SZ
   val MULTIPLER = 4
 
+  private[this] val sni_hosts = new ListBuffer[String]()
+
   // prealoc carryover buffer, position getting saved between calls
   private[this] val IN_J_BUFFER = java.nio.ByteBuffer.allocate(TLS_PACKET_SZ * MULTIPLER)
+
+  override def sniServerNames(): Option[Array[String]] = {
+    if( sni_hosts.size == 0 ) None
+    else Some(sni_hosts.toArray)
+  }  
 
   private[this] def doHandshakeClient() = {
     // val BUFF_SZ = ssl_engine.engine.getSession().getPacketBufferSize()
@@ -430,6 +439,14 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
     } yield (x._2)
   }
 
+  private class QuartzSNIMatcher extends SNIMatcher(0) {
+    // def matches​( serveName: SNIServerName ): Boolean = true
+    def matches(name: SNIServerName): Boolean = {
+      sni_hosts.append(String(name.getEncoded()))
+      true
+    }
+  }
+
   // Server side SSL Init with ALPN for H2 only
   // ALPN (Application Layer Protocol Negotiation) for http2
   // returns leftover chunk which needs to be used before we read chanel again.
@@ -437,6 +454,15 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
   def ssl_init_h2(): Task[Chunk[Byte]] = {
     for {
       _ <- f_SSL.setUseClientMode(false)
+
+      sslParameters <- ZIO.attempt(f_SSL.engine.getSSLParameters())
+      _ <- ZIO.attempt(
+        sslParameters.setSNIMatchers(
+          Array(new QuartzSNIMatcher()).foldLeft(new java.util.ArrayList[SNIMatcher]())((arr, x) => { arr.add(x); arr })
+        )
+      )
+      _ <- ZIO.attempt(f_SSL.engine.setSSLParameters(sslParameters))
+
       _ <- ZIO.attempt(f_SSL.engine.setHandshakeApplicationProtocolSelector((eng, list) => {
         if (list.asScala.find(_ == "h2").isDefined) "h2"
         else "" // application protocol indications will not be used
@@ -518,5 +544,5 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
 
   def remoteAddress(): Task[SocketAddress] = ZIO.attempt(rch.ch.getRemoteAddress())
 
-  def secure = true
+  def secure() = true
 }

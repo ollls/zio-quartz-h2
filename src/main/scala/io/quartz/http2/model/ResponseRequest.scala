@@ -9,6 +9,8 @@ sealed case class Request(
     streamId: Int,
     headers: Headers,
     stream: ZStream[Any, Throwable, Byte],
+    secure: Boolean,
+    sniServerNames: Option[Array[String]],
     trailingHeaders: Promise[Throwable, Headers]
 ) {
   def path: String = headers.get(":path").getOrElse("")

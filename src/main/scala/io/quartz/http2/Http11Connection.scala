@@ -6,7 +6,7 @@ import io.quartz.util.Chunked11
 import io.quartz.http2.Constants.ErrorGen
 import io.quartz.http2.Constants.Error
 import io.quartz.http2.routes.HttpRoute
-import  io.quartz.util.Utils
+import io.quartz.util.Utils
 
 import zio.{ZIO, Task, Chunk, Promise, Ref}
 import zio.stream.ZStream
@@ -57,7 +57,7 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
             r0 <- Utils.splitHeadersAndBody(ch, Chunk.empty[Byte])
             headers_bytes = r0._1
             leftover_bytes = r0._2
-            v1 <- Utils.getHttpHeaderAndLeftover(headers_bytes, ch.secure)
+            v1 <- Utils.getHttpHeaderAndLeftover(headers_bytes, ch.secure())
           } yield (v1._1, leftover_bytes)
 
       headers_received = v._1
@@ -66,7 +66,6 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
       headers <- ZIO.attempt(translateHeadersFrom11to2(headers_received))
 
       _ <- refStart.set(false)
-
 
       validate <- ZIO.when(headers.validatePseudoHeaders == false)(
         ZIO.fail(new BadIncomingData("bad inbound data or invalid request"))
@@ -98,7 +97,7 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
       emptyTH <- Promise.make[Throwable, Headers] // no trailing headers for 1.1
       _ <- emptyTH.succeed(Headers()) // complete with empty
 
-      http11request <- ZIO.attempt(Request(id, streamId, headers, stream, emptyTH))
+      http11request <- ZIO.attempt(Request(id, streamId, headers, stream, ch.secure(), ch.sniServerNames(), emptyTH))
 
       _ <- route2(streamId, http11request, isChunked)
 

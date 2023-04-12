@@ -18,5 +18,7 @@ trait IOChannel {
   def timeOutMs(ts: Int): Unit = timeOut_ms = ts
   def timeOutMs: Int = timeOut_ms
 
-  def secure: Boolean
+  def secure() : Boolean
+  //used in TLS mode to pass parameter from SNI tls extension
+  def sniServerNames() : Option[Array[String]] = None
 }

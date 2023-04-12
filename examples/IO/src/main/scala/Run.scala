@@ -31,18 +31,18 @@ object MyApp extends ZIOAppDefault {
       .succeed(Response.Error(StatusCode.Forbidden).asText("Denied: " + r.uri.getPath()))
       .when(r.uri.getPath().endsWith("test70.jpeg"))
 
-  val R: HttpRouteIO[String] = 
+  val R: HttpRouteIO[String] =
 
     case req @ GET -> "pub" /: remainig_path =>
-      ZIO.succeed(Response.Ok().asText(remainig_path.toString() ) )
+      ZIO.succeed(Response.Ok().asText(remainig_path.toString()))
 
-    //GET with two parameters
+    // GET with two parameters
     case req @ GET -> Root / "hello" / "1" / "2" / "user2" :? param1(test) :? param2(test2) =>
-            ZIO.succeed(Response.Ok().asText("param1=" + test + "  " + "param2=" + test2))
+      ZIO.succeed(Response.Ok().asText("param1=" + test + "  " + "param2=" + test2))
 
-    //GET with paameter, cookies and custom headers        
+    // GET with paameter, cookies and custom headers
     case GET -> Root / "hello" / "user" / StringVar(userId) :? param1(par) =>
-      val headers = Headers( "procid" -> "header_value_from_server", "content-type" -> ContentType.Plain.toString)
+      val headers = Headers("procid" -> "header_value_from_server", "content-type" -> ContentType.Plain.toString)
       val c1 = Cookie("testCookie1", "ABCD", secure = true)
       val c2 = Cookie("testCookie2", "ABCDEFG", secure = false)
       val c3 =
@@ -50,20 +50,21 @@ object MyApp extends ZIOAppDefault {
 
       ZIO.succeed(
         Response
-          .Ok().hdr(headers)
+          .Ok()
+          .hdr(headers)
           .cookie(c1)
           .cookie(c2)
           .cookie(c3)
           .asText(s"$userId with para1 $par")
       )
 
-    //GET with simple ZIO environment made as just a String  
+    // GET with simple ZIO environment made as just a String
     case GET -> Root / "envstr" =>
       for {
         text <- ZIO.environmentWith[String](str => str.get)
       } yield (Response.Ok().asText(s"$text"))
 
-    //automatic multi-part upload, file names preserved  
+    // automatic multi-part upload, file names preserved
     case req @ POST -> Root / "mpart" =>
       MultiPart.writeAll(req, "/Users/ostrygun/") *> ZIO.succeed(Response.Ok())
 
@@ -76,9 +77,10 @@ object MyApp extends ZIOAppDefault {
       } yield (Response.Ok().asText("OK"))
 
     // best path for h2spec
-    case req @ GET -> Root => for {
-     x <- req.stream.runCount
-    } yield( Response.Ok().asText( s"OK bytes received: $x") )
+    case req @ GET -> Root =>
+      for {
+        x <- req.stream.runCount
+      } yield (Response.Ok().asText(s"OK bytes received: $x"))
 
     case req @ POST -> Root =>
       for {
@@ -86,9 +88,20 @@ object MyApp extends ZIOAppDefault {
       } yield (Response.Ok().asText("OK:" + String(u.toArray)))
 
     // perf tests
-    case req @ GET -> Root / "test2" => ZIO.debug( s"connection id = ${req.connId}/${req.streamId}") *> ZIO.attempt(Response.Ok())
+    case req @ GET -> Root / "test2" =>
+      ZIO.debug(s"connection id = ${req.connId}/${req.streamId}") *> ZIO.attempt(Response.Ok())
 
     case req @ GET -> Root / "test" => ZIO.attempt(Response.Ok())
+
+    case req @ GET -> Root / "snihost" =>
+      for {
+        _ <-
+          req.stream.runDrain // properly ignore incoming data, we must flush it, generaly if you sure there will be no data, you can ignore.
+        result_text <- ZIO.attempt(req.sniServerNames match {
+          case Some(hosts) => s"Host names in TLS SNI extension: ${hosts.mkString(",")}"
+          case None        => "No TLS SNI host names provided or unsecure connection"
+        })
+      } yield (Response.Ok().asText(result_text))
 
     case GET -> Root / "example" =>
       // how to send data in separate H2 packets of various size.
@@ -98,7 +111,7 @@ object MyApp extends ZIOAppDefault {
     case GET -> Root / StringVar(file) =>
       val FOLDER_PATH = "/Users/ostrygun/web_root/"
       val FILE = s"$file"
-      val BLOCK_SIZE = 16000
+      val BLOCK_SIZE = 1024 * 14
       for {
         jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
         present <- ZIO.attempt(jpath.exists())
@@ -108,20 +121,26 @@ object MyApp extends ZIOAppDefault {
         .asStream(ZStream.fromFile(jpath, BLOCK_SIZE))
         .contentType(ContentType.contentTypeFromFileName(FILE)))
 
-  def onConnect( id: Long) = {
-    ZIO.logTrace( s"connected - $id")
+  def onConnect(id: Long) = {
+    ZIO.logTrace(s"connected - $id")
   }
 
-   def onDisconnect( id: Long) = {
-    ZIO.logTrace( s"disconnected - $id")
+  def onDisconnect(id: Long) = {
+    ZIO.logTrace(s"disconnected - $id")
   }
 
   def run =
     val env = ZLayer.fromZIO(ZIO.succeed("Hello ZIO World!"))
     (for {
       ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
-      exitCode <- new QuartzH2Server("localhost", 8443, 16000, ctx, /*2097152*/
-      onConnect = onConnect, onDisconnect = onDisconnect).startIO(R, filter, sync = false)
+      exitCode <- new QuartzH2Server(
+        "localhost",
+        8443,
+        16000,
+        ctx, /*2097152,*/
+        onConnect = onConnect,
+        onDisconnect = onDisconnect
+      ).startIO(R, filter, sync = false)
 
     } yield (exitCode)).provideSomeLayer(env)
 
