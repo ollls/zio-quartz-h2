@@ -1,5 +1,6 @@
 package io.quartz
 
+import zio.durationInt
 import zio.{ZIO, UIO, Task, Chunk, Promise, Ref, ExitCode, ZIOApp}
 import zio.stream.ZStream
 import io.quartz.netio._
@@ -111,18 +112,15 @@ class QuartzH2Server[Env](
     onDisconnect: Long => ZIO[Env, Nothing, Unit] = _ => ZIO.unit
 ) {
 
-  // def this(HOST: String) = this(HOST, 8080, 20000, null)
-
   val MAX_HTTP_HEADER_SZ = 16384
   val HTTP1_KEEP_ALIVE_MS = 20000
 
-  var shutdown = false
+  var shutdownFlag = false
 
-  // val HOST = "localhost"
-  // val PORT = 8443
-  // val SERVER = "127.0.0.1"
-
-  val default_server_settings = new Http2Settings()
+  def shutdown = for {
+    _ <- ZIO.succeed { shutdownFlag = true }
+    c <- QuartzH2Client.open(s"http://$HOST:$PORT", 1000, null)
+  } yield ()
 
   def ctrlC_handlerZIO(group: AsynchronousChannelGroup, s0: AsynchronousServerSocketChannel) = ZIO.attempt(
     java.lang.Runtime
@@ -131,7 +129,7 @@ class QuartzH2Server[Env](
         override def run = {
           println("abort")
           // for async wait this is all we need
-          shutdown = true
+          shutdownFlag = true
         }
       })
   )
@@ -142,7 +140,7 @@ class QuartzH2Server[Env](
       .addShutdownHook(new Thread {
         override def run = {
           println("abort2")
-          shutdown = true
+          shutdownFlag = true
           /* blockig socket will need one
            * last connection to process a shutdown flag */
           /* ZIO context not available here hard, we just halt the jvm for now*/
@@ -408,7 +406,10 @@ class QuartzH2Server[Env](
           }.fork
         )
         .catchAll(e => errorHandler(e).ignore)
-        .repeatUntil(_ => shutdown)
+        .repeatUntil(_ => shutdownFlag)
+
+      _ <- ZIO.when(shutdownFlag)(ZIO.logInfo("Shutdown request, server stoped gracefully"))
+      _ <- ZIO.attempt(server_ch.close())
 
     } yield (ExitCode.success)
   }
@@ -458,7 +459,10 @@ class QuartzH2Server[Env](
           }.fork
         )
         .catchAll(e => errorHandler(e).ignore)
-        .repeatUntil(_ => shutdown)
+        .repeatUntil(_ => shutdownFlag)
+
+      _ <- ZIO.when(shutdownFlag)(ZIO.logInfo("Shutdown request, server stoped gracefully"))
+
     } yield (ExitCode.success)
   }
 
@@ -508,7 +512,9 @@ class QuartzH2Server[Env](
           }.fork
         )
         .catchAll(e => errorHandler(e).ignore)
-        .repeatUntil(_ => shutdown)
+        .repeatUntil(_ => shutdownFlag)
+
+      _ <- ZIO.when(shutdownFlag)(ZIO.logInfo("Shutdown request, server stoped gracefully"))
 
     } yield (ExitCode.success)
   }

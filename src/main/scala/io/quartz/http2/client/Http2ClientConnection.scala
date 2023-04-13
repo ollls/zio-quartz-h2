@@ -315,6 +315,7 @@ class Http2ClientConnection(
       })
 
   def dropStreams() = for {
+    _ <- awaitSettings.complete( ZIO.succeed(true) )
     streams <- ZIO.attempt(this.streamTbl.values.toList)
     _ <- ZIO.foreach(streams)(_.d.complete(null))
     _ <- ZIO.foreach(streams)(_.inDataQ.offer(null))
