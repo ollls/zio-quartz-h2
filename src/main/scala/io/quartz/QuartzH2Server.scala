@@ -50,11 +50,18 @@ import scala.concurrent.ExecutionContext
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.ForkJoinPool._
 import java.util.concurrent.ForkJoinPool
+import ch.qos.logback.classic.Level
 
 case class HeaderSizeLimitExceeded(msg: String) extends Exception(msg)
 case class BadProtocol(ch: IOChannel, msg: String) extends Exception(msg)
 
 object QuartzH2Server {
+
+  def setLoggingLevel(level: Level) = {
+    val root = org.slf4j.LoggerFactory.getLogger("ROOT").asInstanceOf[ch.qos.logback.classic.Logger]
+    root.setLevel(level)
+  }
+
   def buildSSLContext(
       protocol: String,
       JKSkeystore: String,
