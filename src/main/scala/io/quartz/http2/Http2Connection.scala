@@ -30,7 +30,7 @@ import io.quartz.http2.routes.HttpRoute
 
 object Http2Connection {
 
-  val STREAMTBL_PURGE_DELAY = 300 // 320 last streams will be recognozable while in closed state
+  val STREAMTBL_PURGE_DELAY = 1024 // n last streams will be recognozable while in closed state
 
   private[this] def outBoundWorkerProc(
       ch: IOChannel,

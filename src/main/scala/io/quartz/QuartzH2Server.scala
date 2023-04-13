@@ -111,7 +111,6 @@ class QuartzH2Server[Env](
     onConnect: Long => ZIO[Env, Throwable, Unit] = _ => ZIO.unit,
     onDisconnect: Long => ZIO[Env, Nothing, Unit] = _ => ZIO.unit
 ) {
-
   val MAX_HTTP_HEADER_SZ = 16384
   val HTTP1_KEEP_ALIVE_MS = 20000
 
@@ -119,7 +118,8 @@ class QuartzH2Server[Env](
 
   def shutdown = for {
     _ <- ZIO.succeed { shutdownFlag = true }
-    c <- QuartzH2Client.open(s"http://$HOST:$PORT", 1000, null)
+    c <- TCPChannel.connect(HOST, PORT)
+    _ <- c.close()
   } yield ()
 
   def ctrlC_handlerZIO(group: AsynchronousChannelGroup, s0: AsynchronousServerSocketChannel) = ZIO.attempt(
@@ -409,7 +409,6 @@ class QuartzH2Server[Env](
         .repeatUntil(_ => shutdownFlag)
 
       _ <- ZIO.when(shutdownFlag)(ZIO.logInfo("Shutdown request, server stoped gracefully"))
-      _ <- ZIO.attempt(server_ch.close())
 
     } yield (ExitCode.success)
   }
