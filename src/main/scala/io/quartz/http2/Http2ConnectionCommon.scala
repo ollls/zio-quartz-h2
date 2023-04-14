@@ -112,12 +112,20 @@ trait Http2ConnectionCommon(
 
             _ <- frames._2 match {
               case Some(f0) =>
-                stream.outXFlowSync.take *> txWindow_Transmit(stream, f0.buffer, f0.dataLen)
+                for {
+                  b <- stream.outXFlowSync.take
+                  _ <- ZIO.when(b == false)(ZIO.fail(new java.lang.InterruptedException()))
+                  _ <- txWindow_Transmit(stream, f0.buffer, f0.dataLen)
+                } yield ()
               case None => ZIO.unit
             }
 
           } yield ())
-        else stream.outXFlowSync.take *> txWindow_Transmit(stream, bb, data_len)
+        else for {
+          b <- stream.outXFlowSync.take
+          _ <- ZIO.when(b == false)(ZIO.fail(new java.lang.InterruptedException()))
+          _ <- txWindow_Transmit(stream, bb, data_len)
+        } yield()  
 
     } yield (bytesCredit)
   }

@@ -50,7 +50,7 @@ object Http2ClientConnection {
   def outBoundWorker(ch: IOChannel, outq: Queue[ByteBuffer]) = (for {
     bb <- outq.take
     _ <- ch.write(bb)
-  } yield ()).catchAll(e => ZIO.logError(("Client: outBoundWorker - " + e.toString())))
+  } yield ()).catchAll(e => ZIO.logDebug(("Client: outBoundWorker - " + e.toString())))
 
   /** Reads data from the given IOChannel and processes it with the packet_handler. This function reads data from the
     * IOChannel in chunks representing Http2 packets, converts them to packets using the makePacketStream function, and
@@ -158,7 +158,7 @@ class Http2ClientConnection(
       inboundWindow: Ref[Long],
       transmitWindow: Ref[Long],
       bytesOfPendingInboundData: Ref[Long],
-      outXFlowSync: Queue[Unit]
+      outXFlowSync: Queue[Boolean]
   ) extends Http2StreamCommon(bytesOfPendingInboundData, inboundWindow, transmitWindow, outXFlowSync)
 
   val streamTbl =
@@ -175,7 +175,7 @@ class Http2ClientConnection(
     transmitWindow <- Ref.make[Long](
       65535L
     ) // set in upddateInitialWindowSizeAllStreams
-    xFlowSync <- Queue.unbounded[Unit]
+    xFlowSync <- Queue.unbounded[Boolean]
   } yield (Http2ClientStream(
     streamId,
     d,
@@ -311,13 +311,15 @@ class Http2ClientConnection(
     makePacketStream(ch, timeOutMs, Chunk.empty[Byte])
       .foreach(p => packet_handler(p))
       .catchAll(e => {
-        ZIO.logError("Client: inBoundWorker - " + e.toString()) *> dropStreams()
+        ZIO.logDebug("Client: inBoundWorker - " + e.toString()) *> dropStreams()
       })
 
   def dropStreams() = for {
+    _ <- awaitSettings.complete(ZIO.succeed(true))
     streams <- ZIO.attempt(this.streamTbl.values.toList)
-    _ <- ZIO.foreach(streams)(_.d.complete(null))
-    _ <- ZIO.foreach(streams)(_.inDataQ.offer(null))
+    _ <- ZIO.foreach(streams)(_.d.complete(ZIO.attempt(null)))
+    _ <- ZIO.foreach(streams)(_.inDataQ.offer(ByteBuffer.allocate(0)))
+    _ <- ZIO.foreach(streams)( s1 => s1.outXFlowSync.offer(false) *> s1.outXFlowSync.offer(false))
   } yield ()
 
   /** packet_handler
@@ -534,6 +536,7 @@ class Http2ClientConnection(
                 _ <- pref.set(chunk)
               } yield ()
             }
+            .catchSome{ case _ : java.lang.InterruptedException => ZIO.unit }
         else ZIO.unit
 
       lastChunk <- pref.get
@@ -543,6 +546,7 @@ class Http2ClientConnection(
             sendDataFrame(streamId, b)
           )
         ))
+        .catchSome{ case _ : java.lang.InterruptedException => ZIO.unit }
         .unit
 
       // END OF DATA /////
@@ -634,7 +638,7 @@ class Http2ClientConnection(
   private[this] def updateInitiallWindowSize(stream: Http2ClientStream, currentWinSize: Int, newWinSize: Int) = {
     ZIO.logInfo(s"Http2Connection.upddateInitialWindowSize( $currentWinSize, $newWinSize)") *>
       stream.transmitWindow.update(txBytesLeft => newWinSize - (currentWinSize - txBytesLeft)) *> stream.outXFlowSync
-        .offer(())
+        .offer(true)
   }
 
   private[this] def upddateInitialWindowSizeAllStreams(currentSize: Int, newSize: Int) = {
@@ -693,7 +697,7 @@ class Http2ClientConnection(
                         )
                       )
                     )
-                    _ <- stream.outXFlowSync.offer(())
+                    _ <- stream.outXFlowSync.offer(true)
                   } yield ()
                 )
                 .unit
@@ -715,7 +719,7 @@ class Http2ClientConnection(
                     )
                   )
 
-                  _ <- stream.outXFlowSync.offer(())
+                  _ <- stream.outXFlowSync.offer(true)
                 } yield ()
             ))
   }
