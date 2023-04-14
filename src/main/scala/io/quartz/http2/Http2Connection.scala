@@ -139,8 +139,8 @@ object Http2Connection {
     } yield (bb)
   }
 
-  private[this] def makeDataStream[Env](
-      c: Http2Connection[Env],
+  def makeDataStream[Env](
+      c: Http2ConnectionCommon,
       q: Queue[ByteBuffer]
   ): ZStream[Any, Throwable, Byte] = {
     val dataStream0 = ZStream.repeatZIO(dataEvalEffectProducer(c, q)).takeUntil { buffer =>
