@@ -329,29 +329,32 @@ class Http2Connection[Env](
     } yield ()
   }
 
+  private[this] def updateAndCheck(streamId: Int, stream: Http2Stream, inc: Int) = {
+    for {
+      _ <- stream.transmitWindow.update(_ + inc)
+      rs <- stream.transmitWindow.get
+      _ <- ZIO
+        .fail(
+          ErrorRst(
+            streamId,
+            Error.FLOW_CONTROL_ERROR,
+            "Sends multiple WINDOW_UPDATE frames increasing the flow control window to above 2^31-1"
+          )
+        )
+        .when(rs >= Integer.MAX_VALUE)
+      _ <- stream.outXFlowSync.offer(true)
+    } yield ()
+
+  }
+
   private[this] def updateWindowStream(streamId: Int, inc: Int) = {
     streamTbl.get(streamId) match {
-      case None => ZIO.logDebug(s"Update window, streamId=$streamId invalid or closed already")
-      case Some(stream) =>
-        for {
-          _ <- stream.transmitWindow.update(_ + inc)
-          rs <- stream.transmitWindow.get
-          _ <- ZIO
-            .fail(
-              ErrorRst(
-                streamId,
-                Error.FLOW_CONTROL_ERROR,
-                "Sends multiple WINDOW_UPDATE frames increasing the flow control window to above 2^31-1"
-              )
-            )
-            .when(rs >= Integer.MAX_VALUE)
-          _ <- stream.outXFlowSync.offer(true)
-        } yield ()
+      case None         => ZIO.logDebug(s"Update window, streamId=$streamId invalid or closed already")
+      case Some(stream) => updateAndCheck(streamId, stream, inc)
     }
   }
 
   private[this] def updateWindow(streamId: Int, inc: Int): Task[Unit] = {
-    // IO.println( "Update Window()") >>
     ZIO.when(inc == 0)(
       ZIO.fail(
         ErrorGen(
@@ -363,22 +366,7 @@ class Http2Connection[Env](
     ) *> (if (streamId == 0)
             updateAndCheckGlobalTx(streamId, inc) *>
               ZIO
-                .foreach(streamTbl.values.toSeq)(stream =>
-                  for {
-                    _ <- stream.transmitWindow.update(_ + inc)
-                    rs <- stream.transmitWindow.get
-                    _ <- ZIO.when(rs >= Integer.MAX_VALUE)(
-                      ZIO.fail(
-                        ErrorGen(
-                          streamId,
-                          Error.FLOW_CONTROL_ERROR,
-                          "Sends multiple WINDOW_UPDATE frames increasing the flow control window to above 2^31-1"
-                        )
-                      )
-                    )
-                    _ <- stream.outXFlowSync.offer(true)
-                  } yield ()
-                )
+                .foreach(streamTbl.values.toSeq)(stream => updateAndCheck(streamId, stream, inc))
                 .unit
           else updateWindowStream(streamId, inc))
   }
@@ -815,7 +803,7 @@ class Http2Connection[Env](
     } yield ()
   }
 
-  def processIncoming(leftOver: Chunk[Byte]) : ZIO[Env, Nothing, Unit] = (for {
+  def processIncoming(leftOver: Chunk[Byte]): ZIO[Env, Nothing, Unit] = (for {
     _ <- ZIO.logTrace(s"Http2Connection.processIncoming() leftOver= ${leftOver.size}")
     _ <- Http2Connection
       .makePacketStream(ch, HTTP2_KEEP_ALIVE_MS, leftOver)
