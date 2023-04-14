@@ -264,45 +264,7 @@ class Http2ClientConnection(
         .repeatZIO(ch.read(keepAliveMs))
         .flatMap(c0 => ZStream.fromChunk(c0))
     val s = s0 ++ s1
-    s.via(packetStreamPipe)
-  }
-
-  private[this] def packetStreamPipe: ZPipeline[Any, Exception, Byte, Chunk[Byte]] = {
-    def go2(carryOver: Chunk[Byte]): ZChannel[Any, Exception, Chunk[Byte], Any, Exception, Chunk[Chunk[Byte]], Any] = {
-      val chunk = carryOver
-      val bb = ByteBuffer.wrap(chunk.toArray)
-      val len = Frames.getLengthField(bb) + 3 + 1 + 1 + 4
-
-      if (chunk.size == len) {
-        ZChannel.write(Chunk.single(chunk)) *> go(Chunk.empty[Byte])
-      } else if (chunk.size > len) {
-        ZChannel.write(Chunk.single(chunk.take(len))) *> go2(chunk.drop(len))
-      } else {
-        go(chunk)
-      }
-    }
-
-    def go(carryOver: Chunk[Byte]): ZChannel[Any, Exception, Chunk[Byte], Any, Exception, Chunk[Chunk[Byte]], Any] = {
-      ZChannel.readWith(
-        ((chunk0: Chunk[Byte]) => {
-
-          val chunk = carryOver ++ chunk0
-
-          val bb = ByteBuffer.wrap(chunk.toArray)
-          val len = Frames.getLengthField(bb) + 3 + 1 + 1 + 4
-
-          if (chunk.size == len) {
-            ZChannel.write(Chunk.single(chunk)) *> go(Chunk.empty[Byte])
-          } else if (chunk.size > len) {
-            ZChannel.write(Chunk.single(chunk.take(len))) *> go2(chunk.drop(len))
-          } else go(chunk)
-
-        }),
-        (err: Exception) => ZChannel.fail(err),
-        (done: Any) => ZChannel.succeed(true)
-      )
-    }
-    ZPipeline.fromChannel(go(Chunk.empty[Byte]))
+    s.via(Http2Connection.packetStreamPipe)
   }
 
   def settings = settings1.get
@@ -319,7 +281,7 @@ class Http2ClientConnection(
     streams <- ZIO.attempt(this.streamTbl.values.toList)
     _ <- ZIO.foreach(streams)(_.d.complete(ZIO.attempt(null)))
     _ <- ZIO.foreach(streams)(_.inDataQ.offer(ByteBuffer.allocate(0)))
-    _ <- ZIO.foreach(streams)( s1 => s1.outXFlowSync.offer(false) *> s1.outXFlowSync.offer(false))
+    _ <- ZIO.foreach(streams)(s1 => s1.outXFlowSync.offer(false) *> s1.outXFlowSync.offer(false))
   } yield ()
 
   /** packet_handler
@@ -536,7 +498,7 @@ class Http2ClientConnection(
                 _ <- pref.set(chunk)
               } yield ()
             }
-            .catchSome{ case _ : java.lang.InterruptedException => ZIO.unit }
+            .catchSome { case _: java.lang.InterruptedException => ZIO.unit }
         else ZIO.unit
 
       lastChunk <- pref.get
@@ -546,7 +508,7 @@ class Http2ClientConnection(
             sendDataFrame(streamId, b)
           )
         ))
-        .catchSome{ case _ : java.lang.InterruptedException => ZIO.unit }
+        .catchSome { case _: java.lang.InterruptedException => ZIO.unit }
         .unit
 
       // END OF DATA /////
