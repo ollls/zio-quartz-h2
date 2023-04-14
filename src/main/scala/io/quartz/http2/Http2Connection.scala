@@ -2,23 +2,13 @@ package io.quartz.http2
 
 import scala.collection.mutable.ArrayBuffer
 import java.nio.channels.AsynchronousSocketChannel
-
 import java.nio.ByteBuffer
-
 import io.quartz.http2.Constants._
-
 import io.quartz.http2.model.{Request, Response, Headers, ContentType, StatusCode}
 import io.quartz.netio._
-
 import scala.collection.mutable
-
-import scala.concurrent.duration.FiniteDuration
 import concurrent.duration.DurationInt
-
-import java.nio.charset.StandardCharsets
-
 import scala.jdk.CollectionConverters.MapHasAsScala
-
 import io.quartz.http2.routes.Routes
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.Executors
@@ -29,9 +19,6 @@ import zio.stream.{ZStream, ZChannel, ZPipeline}
 import io.quartz.http2.routes.HttpRoute
 
 object Http2Connection {
-
-  val STREAMTBL_PURGE_DELAY = 1024 // n last streams will be recognozable while in closed state
-
   private[this] def outBoundWorkerProc(
       ch: IOChannel,
       outq: Queue[ByteBuffer],
@@ -306,7 +293,7 @@ class Http2Connection[Env](
     qShutdown <- outq.isShutdown
     _ <- ZIO.when(qShutdown == false)(outq.offer(ByteBuffer.allocate(0)))
     _ <- shutdownD.await.unit
-    _ <- ZIO.logError("Http2Connection.shutdown")
+    _ <- ZIO.logDebug("Http2Connection.shutdown")
   } yield ()
 
   /*
@@ -342,6 +329,27 @@ class Http2Connection[Env](
     } yield ()
   }
 
+  private[this] def updateWindowStream(streamId: Int, inc: Int) = {
+    streamTbl.get(streamId) match {
+      case None => ZIO.logError(s"Update window, streamId=$streamId invalid or closed already")
+      case Some(stream) =>
+        for {
+          _ <- stream.transmitWindow.update(_ + inc)
+          rs <- stream.transmitWindow.get
+          _ <- ZIO
+            .fail(
+              ErrorRst(
+                streamId,
+                Error.FLOW_CONTROL_ERROR,
+                "Sends multiple WINDOW_UPDATE frames increasing the flow control window to above 2^31-1"
+              )
+            )
+            .when(rs >= Integer.MAX_VALUE)
+          _ <- stream.outXFlowSync.offer(())
+        } yield ()
+    }
+  }
+
   private[this] def updateWindow(streamId: Int, inc: Int): Task[Unit] = {
     // IO.println( "Update Window()") >>
     ZIO.when(inc == 0)(
@@ -359,7 +367,6 @@ class Http2Connection[Env](
                   for {
                     _ <- stream.transmitWindow.update(_ + inc)
                     rs <- stream.transmitWindow.get
-                    // _ <- IO.println("RS = " + rs)
                     _ <- ZIO.when(rs >= Integer.MAX_VALUE)(
                       ZIO.fail(
                         ErrorGen(
@@ -373,35 +380,15 @@ class Http2Connection[Env](
                   } yield ()
                 )
                 .unit
-          else
-            updateStreamWith(
-              1,
-              streamId,
-              stream =>
-                for {
-                  _ <- stream.transmitWindow.update(_ + inc)
-                  rs <- stream.transmitWindow.get
-                  _ <- ZIO.when(rs >= Integer.MAX_VALUE)(
-                    ZIO.fail(
-                      ErrorRst(
-                        streamId,
-                        Error.FLOW_CONTROL_ERROR,
-                        ""
-                      )
-                    )
-                  )
-
-                  _ <- stream.outXFlowSync.offer(())
-                } yield ()
-            ))
+          else updateWindowStream(streamId, inc))
   }
 
   private[this] def handleStreamErrors(streamId: Int, e: Throwable): Task[Unit] = {
     e match {
       case e @ ErrorGen(streamId, code, name) =>
-        ZIO.logError("handleStreamErrors: " + e.toString) *>
+        ZIO.logError(s"handleStreamErrors: streamID = $streamId ${e.name}") *>
           ch.write(Frames.mkGoAwayFrame(streamId, code, name.getBytes)).unit *> this.ch.close()
-      case _ => ZIO.logError("handleStreamErrors:: " + e.toString) *> ZIO.fail(e)
+      case _ => ZIO.logError(s"handleStreamErrors: " + e.toString) *> ZIO.fail(e)
     }
   }
 
@@ -695,8 +682,6 @@ class Http2Connection[Env](
     } yield (b)
   }
 
-
-
   ////////////////////////////////////////////
   def route2(streamId: Int, request: Request): ZIO[Env, Throwable, Unit] = {
 
@@ -784,7 +769,7 @@ class Http2Connection[Env](
             lastChunk <- pref.get
             _ <- (ZIO
               .when(endStreamInHeaders == false)(
-                ZIO.foreach(dataFrame(settings,streamId, true, ByteBuffer.wrap(lastChunk.toArray)))(b =>
+                ZIO.foreach(dataFrame(settings, streamId, true, ByteBuffer.wrap(lastChunk.toArray)))(b =>
                   sendDataFrame(streamId, b)
                 )
               ))
@@ -825,12 +810,31 @@ class Http2Connection[Env](
   def closeStream(streamId: Int): Task[Unit] = {
     for {
       _ <- ZIO.succeed(concurrentStreams.decrementAndGet())
-      _ <- ZIO.attempt(streamTbl.remove(streamId - Http2Connection.STREAMTBL_PURGE_DELAY))
+      _ <- ZIO.attempt(streamTbl.remove(streamId))
       _ <- ZIO.logDebug(s"Close stream: $streamId")
     } yield ()
-
   }
 
+  def processIncoming(leftOver: Chunk[Byte]) : ZIO[Env, Nothing, Unit] = (for {
+    _ <- ZIO.logTrace(s"Http2Connection.processIncoming() leftOver= ${leftOver.size}")
+    _ <- Http2Connection
+      .makePacketStream(ch, HTTP2_KEEP_ALIVE_MS, leftOver)
+      .foreach(packet => { packet_handler(httpReq11, packet) })
+  } yield ()).catchAll {
+    case e @ TLSChannelError(_) =>
+      ZIO.logDebug(s"connid = ${this.id} ${e.toString} ${e.getMessage()}") *>
+        ZIO.logError(s"Forced disconnect connId=${this.id} with tls error")
+    case e: java.nio.channels.ClosedChannelException =>
+      ZIO.logInfo(s"Connection connId=${this.id} closed by remote")
+    case e @ ErrorGen(streamId, code, name) =>
+      ZIO.logError(s"Forced disconnect connId=${this.id} code=${e.code} ${name}") *>
+        sendFrame(Frames.mkGoAwayFrame(streamId, code, name.getBytes)).unit
+    case e @ _ => {
+      ZIO.logError(e.toString())
+    }
+  }
+
+  /*
   def processIncoming(leftOver: Chunk[Byte]): ZIO[Env, Throwable, Unit] = {
     ZIO.logTrace(s"Http2Connection.processIncoming() leftOver= ${leftOver.size}") *>
       Http2Connection
@@ -843,7 +847,7 @@ class Http2Connection[Env](
     case e @ _ => {
       ZIO.logError(e.toString())
     }
-  }
+  }*/
 
   ////////////////////////////////////////////////////
   def packet_handler(
@@ -918,8 +922,14 @@ class Http2Connection[Env](
                     ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "streamId is 0 for HEADER"))
                   )
 
-                  _ <- ZIO.when(lastStreamId != 0 && lastStreamId > streamId)(
-                    ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, ""))
+                  _ <- ZIO.when(streamId <= lastStreamId)(
+                    ZIO.fail(
+                      ErrorGen(
+                        streamId,
+                        Error.PROTOCOL_ERROR,
+                        "stream's Id number is less than previously used Id number"
+                      )
+                    )
                   )
 
                   _ <- ZIO.succeed { lastStreamId = streamId }
@@ -1025,13 +1035,24 @@ class Http2Connection[Env](
 
             case FrameTypes.WINDOW_UPDATE => {
               val increment = buffer.getInt() & Masks.INT31
-              ZIO.logDebug(s"WINDOW_UPDATE $increment $streamId") *> this
-                .updateWindow(streamId, increment)
-                .catchAll {
-                  case e @ ErrorRst(streamId, code, name) =>
-                    ZIO.logError("Reset frane") *> sendFrame(Frames.mkRstStreamFrame(streamId, code))
-                  case e @ _ => ZIO.fail(e)
-                }
+              for {
+                _ <- ZIO.when(streamId > lastStreamId)(
+                  ZIO.fail(
+                    ErrorGen(
+                      streamId,
+                      Error.PROTOCOL_ERROR,
+                      "stream's Id number is less than previously used Id number"
+                    )
+                  )
+                )
+                _ <- ZIO.logDebug(s"WINDOW_UPDATE $increment $streamId") *> this
+                  .updateWindow(streamId, increment)
+                  .catchAll {
+                    case e @ ErrorRst(streamId, code, name) =>
+                      ZIO.logError("Reset frame") *> sendFrame(Frames.mkRstStreamFrame(streamId, code))
+                    case e @ _ => ZIO.fail(e)
+                  }
+              } yield ()
             }
 
             case FrameTypes.PING =>
