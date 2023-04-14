@@ -532,7 +532,7 @@ class Http2ClientConnection(
 
       data_stream <-
         if ((flags & Flags.END_STREAM) == Flags.END_STREAM) ZIO.attempt(EmptyStream)
-        else ZIO.attempt(makeDataStream(this, stream.inDataQ))
+        else ZIO.attempt( Http2Connection.makeDataStream(this, stream.inDataQ))
 
       code <- ZIO.attempt(h.get(":status").get)
       _ <- ZIO.logDebug(
@@ -559,26 +559,6 @@ class Http2ClientConnection(
     val streamId = Frames.getStreamId(sbb)
 
     (len, frameType, flags, streamId)
-  }
-
-  private[this] def makeDataStream(
-      c: Http2ClientConnection,
-      q: Queue[ByteBuffer]
-  ): ZStream[Any, Throwable, Byte] = {
-    val dataStream0 = ZStream.repeatZIO(Http2Connection.dataEvalEffectProducer(c, q)).takeUntil { buffer =>
-      val len = Frames.getLengthField(buffer)
-      val frameType = buffer.get()
-      val flags = buffer.get()
-      val _ = Frames.getStreamId(buffer)
-
-      val padLen: Byte = if ((flags & Flags.PADDED) != 0) buffer.get() else 0 // advance one byte padding len 1
-
-      val lim = buffer.limit() - padLen
-      buffer.limit(lim)
-      val continue: Boolean = ((flags & Flags.END_STREAM) == 0)
-      !continue
-    }
-    dataStream0.flatMap(b => ZStream.fromChunk(Chunk.fromByteBuffer(b)))
   }
 
   private[this] def accumData(streamId: Int, bb: ByteBuffer, dataSize: Int): Task[Unit] = {
