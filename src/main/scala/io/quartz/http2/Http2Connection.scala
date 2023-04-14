@@ -217,7 +217,7 @@ trait Http2StreamCommon(
     val bytesOfPendingInboundData: Ref[Long],
     val inboundWindow: Ref[Long],
     val transmitWindow: Ref[Long],
-    val outXFlowSync: Queue[Unit]
+    val outXFlowSync: Queue[Boolean]
 )
 
 class Http2Stream(
@@ -226,7 +226,7 @@ class Http2Stream(
     val header: ArrayBuffer[ByteBuffer],
     val trailing_header: ArrayBuffer[ByteBuffer],
     val inDataQ: Queue[ByteBuffer], // accumulate data packets in stream function
-    outXFlowSync: Queue[Unit], // flow control sync queue for data frames
+    outXFlowSync: Queue[Boolean], // flow control sync queue for data frames
     transmitWindow: Ref[Long],
     syncUpdateWindowQ: Queue[Unit],
     bytesOfPendingInboundData: Ref[Long],
@@ -304,7 +304,7 @@ class Http2Connection[Env](
   private[this] def updateInitiallWindowSize(stream: Http2Stream, currentWinSize: Int, newWinSize: Int) = {
     ZIO.logInfo(s"Http2Connection.upddateInitialWindowSize( $currentWinSize, $newWinSize)") *>
       stream.transmitWindow.update(txBytesLeft => newWinSize - (currentWinSize - txBytesLeft)) *> stream.outXFlowSync
-        .offer(())
+        .offer(true)
   }
 
   private[this] def upddateInitialWindowSizeAllStreams(currentSize: Int, newSize: Int) = {
@@ -331,7 +331,7 @@ class Http2Connection[Env](
 
   private[this] def updateWindowStream(streamId: Int, inc: Int) = {
     streamTbl.get(streamId) match {
-      case None => ZIO.logError(s"Update window, streamId=$streamId invalid or closed already")
+      case None => ZIO.logDebug(s"Update window, streamId=$streamId invalid or closed already")
       case Some(stream) =>
         for {
           _ <- stream.transmitWindow.update(_ + inc)
@@ -345,7 +345,7 @@ class Http2Connection[Env](
               )
             )
             .when(rs >= Integer.MAX_VALUE)
-          _ <- stream.outXFlowSync.offer(())
+          _ <- stream.outXFlowSync.offer(true)
         } yield ()
     }
   }
@@ -376,7 +376,7 @@ class Http2Connection[Env](
                         )
                       )
                     )
-                    _ <- stream.outXFlowSync.offer(())
+                    _ <- stream.outXFlowSync.offer(true)
                   } yield ()
                 )
                 .unit
@@ -419,7 +419,7 @@ class Http2Connection[Env](
       trailing_header <- ZIO.succeed(ArrayBuffer.empty[ByteBuffer])
 
       dataOut <- Queue.bounded[ByteBuffer](1) // up to MAX_CONCURRENT_STREAMS users
-      xFlowSync <- Queue.unbounded[Unit]
+      xFlowSync <- Queue.unbounded[Boolean]
       dataIn <- Queue.unbounded[ByteBuffer]
       transmitWindow <- Ref.make[Long](settings_client.INITIAL_WINDOW_SIZE)
 
@@ -477,7 +477,7 @@ class Http2Connection[Env](
       trailing_header <- ZIO.succeed(ArrayBuffer.empty[ByteBuffer])
 
       dataOut <- Queue.bounded[ByteBuffer](1) // up to MAX_CONCURRENT_STREAMS users
-      xFlowSync <- Queue.unbounded[Unit]
+      xFlowSync <- Queue.unbounded[Boolean]
       dataIn <- Queue.unbounded[ByteBuffer]
       transmitWindow <- Ref.make[Long](settings_client.INITIAL_WINDOW_SIZE)
 

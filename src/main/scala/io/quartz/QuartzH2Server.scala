@@ -432,6 +432,7 @@ class QuartzH2Server[Env](
         .catchAll(e => errorHandler(e).ignore)
         .repeatUntil(_ => shutdownFlag)
 
+      _ <- ZIO.attempt(server_ch.close())
       _ <- ZIO.when(shutdownFlag)(ZIO.logInfo("Shutdown request, server stoped gracefully"))
 
     } yield (ExitCode.success)
@@ -484,6 +485,7 @@ class QuartzH2Server[Env](
         .catchAll(e => errorHandler(e).ignore)
         .repeatUntil(_ => shutdownFlag)
 
+      _ <- ZIO.attempt(server_ch.close())
       _ <- ZIO.when(shutdownFlag)(ZIO.logInfo("Shutdown request, server stoped gracefully"))
 
     } yield (ExitCode.success)
@@ -537,6 +539,7 @@ class QuartzH2Server[Env](
         .catchAll(e => errorHandler(e).ignore)
         .repeatUntil(_ => shutdownFlag)
 
+      _ <- ZIO.attempt(server_ch.close())  
       _ <- ZIO.when(shutdownFlag)(ZIO.logInfo("Shutdown request, server stoped gracefully"))
 
     } yield (ExitCode.success)
