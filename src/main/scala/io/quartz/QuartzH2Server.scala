@@ -318,6 +318,17 @@ class QuartzH2Server[Env](
     ia.getHostString()
   }
 
+  private def printSniName(names: Option[Array[String]]) = {
+    names match {
+      case Some(value) => value(0)
+      case None        => "not provided"
+    }
+  }
+
+  private def tlsPrint(c: TLSChannel) = {
+    c.f_SSL.engine.getSession().getCipherSuite()
+  }
+
   def startIO(
       pf: HttpRouteIO[Env],
       filter: WebFilter = (r0: Request) => ZIO.succeed(None),
@@ -402,6 +413,12 @@ class QuartzH2Server[Env](
 
       ch0 <- accept
         .flatMap((c => c.ssl_init_h2().map((c, _)).catchAll(e => c.close().ignore *> ZIO.fail(e))))
+        .tap(c =>
+          ZIO.logInfo(
+            s"${c._1.ctx.getProtocol()} ${tlsPrint(c._1)} ${c._1.f_SSL.engine
+                .getApplicationProtocol()} tls-sni: ${printSniName(c._1.sniServerNames())}"
+          )
+        )
         .tap(_ => conId.update(_ + 1))
         .flatMap(ch1 =>
           ZIO.scoped {

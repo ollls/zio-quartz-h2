@@ -50,7 +50,7 @@ object Http2ClientConnection {
   def outBoundWorker(ch: IOChannel, outq: Queue[ByteBuffer]) = (for {
     bb <- outq.take
     _ <- ch.write(bb)
-  } yield ()).catchAll(e => ZIO.logError(("Client: outBoundWorker - " + e.toString())))
+  } yield ()).catchAll(e => ZIO.logDebug(("Client: outBoundWorker - " + e.toString())))
 
   /** Reads data from the given IOChannel and processes it with the packet_handler. This function reads data from the
     * IOChannel in chunks representing Http2 packets, converts them to packets using the makePacketStream function, and
@@ -311,7 +311,7 @@ class Http2ClientConnection(
     makePacketStream(ch, timeOutMs, Chunk.empty[Byte])
       .foreach(p => packet_handler(p))
       .catchAll(e => {
-        ZIO.logError("Client: inBoundWorker - " + e.toString()) *> dropStreams()
+        ZIO.logDebug("Client: inBoundWorker - " + e.toString()) *> dropStreams()
       })
 
   def dropStreams() = for {

@@ -48,9 +48,10 @@ object HelloWorldSpec extends ZIOSpecDefault {
           fib <- (server.startIO(R, sync = false)).fork
           _ <- live(Clock.sleep(2000.milli))
           c <- QuartzH2Client.open(s"https://localhost:$PORT", 1000, ctx)
-          program = c.doGet("/" + BIG_FILE).flatMap(_.stream.runDrain)
+          program = c.doGet("/" + BIG_FILE).flatMap(_.stream.runCount)
           list <- ZIO.attempt(Array.fill(30)(program))
           r <- ZIO.collectAllPar(list)
+          _ <- ZIO.foreach(r)(totalBytes => ZIO.logInfo(s" $totalBytes received"))
           _ <- server.shutdown
           _ <- fib.join
         } yield (assertTrue(r.length == 30))
