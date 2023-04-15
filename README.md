@@ -113,19 +113,20 @@ Finished in 3.7611 seconds
 * Performance test with h2load.
 
 ```
-h2load -D10 -c32 -m20 https://localhost:8444/test
+h2load -D10 -c68 -m30 -t2 https://localhost:8443/test
 
 ...
 
-finished in 10.01s, 60531.00 req/s, 591.29KB/s
-requests: 605310 total, 605950 started, 605310 done, 605310 succeeded, 0 failed, 0 errored, 0 timeout
-status codes: 605310 2xx, 0 3xx, 0 4xx, 0 5xx
-traffic: 5.77MB (6054828) total, 591.12KB (605310) headers (space savings 90.00%), 0B (0) data
+finished in 10.01s, 65292.20 req/s, 637.89KB/s
+requests: 652922 total, 654452 started, 652922 done, 652922 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 652922 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 6.23MB (6531974) total, 637.62KB (652922) headers (space savings 90.00%), 0B (0) data
                      min         max         mean         sd        +/- sd
-time for request:      229us    117.26ms      8.35ms      3.84ms    68.19%
-time for connect:     6.12ms    330.56ms    149.18ms    101.51ms    56.25%
-time to 1st byte:     7.19ms    344.09ms    154.27ms    104.43ms    56.25%
-req/s           :    1833.28     1959.44     1890.35       37.16    65.63%
+time for request:      231us    144.82ms     19.31ms     10.02ms    73.06%
+time for connect:     7.39ms    860.22ms    385.69ms    278.36ms    54.90%
+time to 1st byte:     9.10ms    875.77ms    398.01ms    282.96ms    54.90%
+req/s           :       0.00     1489.99      959.99      563.28    75.00%
+
 
 ```
 
