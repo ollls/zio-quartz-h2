@@ -4,7 +4,7 @@
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=ollls_zio-quartz-h2&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=ollls_zio-quartz-h2)
 
 # Asyncronous Java NIO **http/2 TLS** packet streaming server/client.
-It's now with HTTP/1.1, check 0.5.3 release notes.
+It's now with HTTP/1.1
 
 ZIO2 native,asynchronous,Java NIO based implementation of http/2 packet streaming server with TLS encryption implemented as scala ZIO2 effect with ALPN h2 tag. Direct native translation of ZIO ZStream chunks into http2 packets (inbound and outbound). Tested and optimized to produce highest possible TPS. Server supports http multipart with ZStream interface along with automatic file saving for file based multipart uploads.
 
