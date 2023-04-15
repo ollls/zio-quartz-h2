@@ -104,7 +104,7 @@ object MyApp extends ZIOAppDefault {
         })
       } yield (Response.Ok().asText(result_text))
 
-    case GET -> Root / "example" =>
+    case "localhost" ! GET -> Root / "example" =>
       // how to send data in separate H2 packets of various size.
       val ts = ZStream.fromChunks(Chunk.fromArray("Block1\n".getBytes()), Chunk.fromArray("Block22\n".getBytes()))
       ZIO.attempt(Response.Ok().asStream(ts))
