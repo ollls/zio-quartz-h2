@@ -1,6 +1,6 @@
 <img src="quartz-h2.jpeg" width="84" title="quartz-h2"/>
 
-[![Generic badge](https://img.shields.io/badge/zio--quartz--h2-0.5.3-blue)](https://repo1.maven.org/maven2/io/github/ollls/zio-quartz-h2_3/0.5.3)
+[![Generic badge](https://img.shields.io/badge/zio--quartz--h2-0.5.4-blue)](https://repo1.maven.org/maven2/io/github/ollls/zio-quartz-h2_3/0.5.4)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=ollls_zio-quartz-h2&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=ollls_zio-quartz-h2)
 
 # Asyncronous Java NIO **http/2 TLS** packet streaming server/client.
@@ -11,7 +11,7 @@ ZIO2 native,asynchronous,Java NIO based implementation of http/2 packet streamin
 ``` 
 libraryDependencies += "io.github.ollls" %% "zio-quartz-h2" % "0.5.3"
 ```
-* 0.5.3 template example: client/server (quartz-h2 HTTP/2 client only supports TLS with ALPN H2 HTTP/2 hosts), `sbt run`<br>
+* 0.5.4 template example: client/server (quartz-h2 HTTP/2 client only supports TLS with ALPN H2 HTTP/2 hosts), `sbt run`<br>
 https://github.com/ollls/zio-quartz-demo
 * Template project with use cases, `sbt run`:<br>https://github.com/ollls/zio-qh2-examples
 * Use cases:<br> https://github.com/ollls/zio-quartz-h2/blob/master/examples/IO/src/main/scala/Run.scala, to run: `sbt IO/run`
