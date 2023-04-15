@@ -123,11 +123,11 @@ class QuartzH2Server[Env](
 
   var shutdownFlag = false
 
-  def shutdown = for {
+  def shutdown = (for {
     _ <- ZIO.succeed { shutdownFlag = true }
     c <- TCPChannel.connect(HOST, PORT)
     _ <- c.close()
-  } yield ()
+  } yield ()).catchAll(_ => ZIO.unit)
 
   def ctrlC_handlerZIO(group: AsynchronousChannelGroup, s0: AsynchronousServerSocketChannel) = ZIO.attempt(
     java.lang.Runtime
@@ -300,17 +300,19 @@ class QuartzH2Server[Env](
 
   ///////////////////////////////////
   def errorHandler(e: Throwable) = {
-    e match {
-      case BadProtocol(ch, e) =>
-        ch.write(Frames.mkGoAwayFrame(0, Error.PROTOCOL_ERROR, e.getBytes))
-        /*ch.write(ByteBuffer.wrap(responseStringNo11().getBytes))*/ *> ZIO.logError(
-          e.toString
-        )
-      case e: java.nio.channels.InterruptedByTimeoutException =>
-        ZIO.logInfo("Remote peer disconnected on timeout")
-      case _ => ZIO.logError("errorHandler: " + e.toString)
-      /*>> IO(e.printStackTrace)*/
-    }
+    if (shutdownFlag == false) {
+      e match {
+        case BadProtocol(ch, e) =>
+          ch.write(Frames.mkGoAwayFrame(0, Error.PROTOCOL_ERROR, e.getBytes))
+          /*ch.write(ByteBuffer.wrap(responseStringNo11().getBytes))*/ *> ZIO.logError(
+            e.toString
+          )
+        case e: java.nio.channels.InterruptedByTimeoutException =>
+          ZIO.logInfo("Remote peer disconnected on timeout")
+        case _ => ZIO.logError("errorHandler: " + e.toString)
+        /*>> IO(e.printStackTrace)*/
+      }
+    } else ZIO.unit
   }
 
   def hostName(address: SocketAddress) = {
@@ -539,7 +541,7 @@ class QuartzH2Server[Env](
         .catchAll(e => errorHandler(e).ignore)
         .repeatUntil(_ => shutdownFlag)
 
-      _ <- ZIO.attempt(server_ch.close())  
+      _ <- ZIO.attempt(server_ch.close())
       _ <- ZIO.when(shutdownFlag)(ZIO.logInfo("Shutdown request, server stoped gracefully"))
 
     } yield (ExitCode.success)
