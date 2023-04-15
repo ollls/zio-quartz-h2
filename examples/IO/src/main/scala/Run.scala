@@ -11,6 +11,7 @@ import io.quartz.http2.routes.Routes
 import io.quartz.http2.model.Cookie
 import io.quartz.http2.routes.HttpRouteIO
 import io.quartz.http2.routes.WebFilter
+import ch.qos.logback.classic.Level
 
 import zio.logging.LogFormat
 import zio.logging.backend.SLF4J
@@ -129,9 +130,14 @@ object MyApp extends ZIOAppDefault {
     ZIO.logTrace(s"disconnected - $id")
   }
 
-  def run =
+  def run = {
     val env = ZLayer.fromZIO(ZIO.succeed("Hello ZIO World!"))
     (for {
+      args <- this.getArgs
+      _    <- ZIO.when(args.find( _ == "--debug").isDefined )( ZIO.attempt(QuartzH2Server.setLoggingLevel( Level.DEBUG )) )
+      _    <- ZIO.when(args.find( _ == "--error").isDefined )( ZIO.attempt(QuartzH2Server.setLoggingLevel( Level.ERROR )) )
+      _    <- ZIO.when(args.find( _ == "--off").isDefined )( ZIO.attempt(QuartzH2Server.setLoggingLevel( Level.OFF )) )
+
       ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
       exitCode <- new QuartzH2Server(
         "localhost",
@@ -143,5 +149,6 @@ object MyApp extends ZIOAppDefault {
       ).startIO(R, filter, sync = false)
 
     } yield (exitCode)).provideSomeLayer(env)
+  }
 
 }
