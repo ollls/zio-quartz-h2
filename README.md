@@ -107,8 +107,8 @@ case GET -> Root / StringVar(file) =>
 
 You should get:
 ```
-Finished in 3.7611 seconds
-94 tests, 92 passed, 1 skipped, 1 failed<br>
+Finished in 2.1959 seconds
+94 tests, 94 passed, 0 skipped, 0 failed<br>
 ```
 * Performance test with h2load.
 
