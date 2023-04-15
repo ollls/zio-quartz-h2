@@ -126,7 +126,7 @@ object Http2Connection {
   ): Task[ByteBuffer] = {
     for {
       bb <- q.take
-      _ <- ZIO.when(bb == null)(ZIO.fail(java.nio.channels.ClosedChannelException()))
+      _ <- ZIO.when(bb == null || bb.remaining() == 0)(ZIO.fail(java.nio.channels.ClosedChannelException()))
       tp <- ZIO.attempt(parseFrame(bb))
       streamId = tp._4
       len = tp._1
@@ -821,21 +821,6 @@ class Http2Connection[Env](
       ZIO.logError(e.toString())
     }
   }
-
-  /*
-  def processIncoming(leftOver: Chunk[Byte]): ZIO[Env, Throwable, Unit] = {
-    ZIO.logTrace(s"Http2Connection.processIncoming() leftOver= ${leftOver.size}") *>
-      Http2Connection
-        .makePacketStream(ch, HTTP2_KEEP_ALIVE_MS, leftOver)
-        .foreach(packet => { packet_handler(httpReq11, packet) })
-  }.catchAll {
-    case e @ ErrorGen(streamId, code, name) =>
-      ZIO.logError(s"Http2Connnection.processIncoming() ${e.code} ${name}") *>
-        sendFrame(Frames.mkGoAwayFrame(streamId, code, name.getBytes)).unit
-    case e @ _ => {
-      ZIO.logError(e.toString())
-    }
-  }*/
 
   ////////////////////////////////////////////////////
   def packet_handler(

@@ -53,10 +53,10 @@ object HelloWorldSpec extends ZIOSpecDefault {
         val NUMBER_OF_STREAMS = 30
         for {
           ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
-          server <- ZIO.attempt(new QuartzH2Server("localhost", PORT.toInt, 16000, ctx))
+          server <- ZIO.attempt(new QuartzH2Server("localhost", PORT.toInt, 15*1000, ctx))
           fib <- (server.startIO(R, sync = false)).fork
           _ <- live(Clock.sleep(2000.milli))
-          c <- QuartzH2Client.open(s"https://localhost:$PORT", 1000, ctx)
+          c <- QuartzH2Client.open(s"https://localhost:$PORT", 10*1000, ctx)
           program = c.doGet("/" + BIG_FILE).flatMap(_.stream.runCount)
           list <- ZIO.attempt(Array.fill(NUMBER_OF_STREAMS)(program))
           r <- ZIO.collectAllPar(list)
@@ -85,13 +85,13 @@ object HelloWorldSpec extends ZIOSpecDefault {
         val NUMBER_OF_STREAMS = 30
         for {
           ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
-          server <- ZIO.attempt(new QuartzH2Server("localhost", PORT.toInt, 16000, ctx))
+          server <- ZIO.attempt(new QuartzH2Server("localhost", PORT.toInt, 15*1000, ctx))
           fib <- (server.startIO(R, sync = false)).fork
           _ <- live(Clock.sleep(2000.milli))
           path <- ZIO.attempt(new java.io.File(FOLDER_PATH + BIG_FILE))
           present <- ZIO.attempt(path.exists())
           _ <- ZIO.fail(new java.io.FileNotFoundException(path.toString())).when(present == false)
-          c <- QuartzH2Client.open(s"https://localhost:$PORT", 1000, ctx)
+          c <- QuartzH2Client.open(s"https://localhost:$PORT", 10*1000, ctx)
 
           program = for {
             fileStream <- ZIO.attempt(new java.io.FileInputStream(path))
