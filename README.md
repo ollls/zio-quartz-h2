@@ -12,7 +12,8 @@ ZIO2 native,asynchronous,Java NIO based implementation of http/2 packet streamin
 libraryDependencies += "io.github.ollls" %% "zio-quartz-h2" % "0.5.4"
 ```
 
-to run example from this code base:
+to run example directly from zio-quartz-h2 code base directly
+
 ```
 sbt IO/run
 ```
