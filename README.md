@@ -18,6 +18,18 @@ to run example from zio-quartz-h2 code base directly
 sbt IO/run
 ```
 
+* Loggng
+
+Use .../src/main/resources/logback-test.xml to tailor to your specific requirements.
+
+Also you may use options to control logging level.
+```
+sbt "run --debug"
+sbt "run --error"
+sbt "run --off"
+```
+
+
 * 0.5.4 template example: client/server (quartz-h2 HTTP/2 client only supports TLS with ALPN H2 HTTP/2 hosts)<br>
 https://github.com/ollls/zio-quartz-demo
 * Template project with use cases, `sbt run`:<br>https://github.com/ollls/zio-qh2-examples
