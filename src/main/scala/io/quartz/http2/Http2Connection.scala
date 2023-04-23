@@ -811,7 +811,7 @@ class Http2Connection[Env](
   } yield ()).catchAll {
     case e @ TLSChannelError(_) =>
       ZIO.logDebug(s"connid = ${this.id} ${e.toString} ${e.getMessage()}") *>
-        ZIO.logError(s"Forced disconnect connId=${this.id} with tls error")
+        ZIO.logError(s"connId=${this.id} ${e.toString()}")
     case e: java.nio.channels.ClosedChannelException =>
       ZIO.logInfo(s"Connection connId=${this.id} closed by remote")
     case e @ ErrorGen(streamId, code, name) =>
@@ -995,7 +995,7 @@ class Http2Connection[Env](
                 )
 
                 _ <- ZIO.when(headersEnded == false)(
-                  ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "******CON or HEADERS nit finished"))
+                  ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "HEADERS not finished but DATA frame received"))
                 )
 
                 b <- hasEnded(streamId)

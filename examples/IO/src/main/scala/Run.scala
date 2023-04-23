@@ -33,6 +33,10 @@ object MyApp extends ZIOAppDefault {
       .when(r.uri.getPath().endsWith("test70.jpeg"))
 
   val R: HttpRouteIO[String] =
+    case req @ GET -> Root / "ldt" =>
+      for {
+        time <- ZIO.succeed(java.time.LocalDateTime.now())
+      } yield (Response.Ok().asText(time.toString()))
 
     case req @ GET -> "pub" /: remainig_path =>
       ZIO.succeed(Response.Ok().asText(remainig_path.toString()))
@@ -134,9 +138,10 @@ object MyApp extends ZIOAppDefault {
     val env = ZLayer.fromZIO(ZIO.succeed("Hello ZIO World!"))
     (for {
       args <- this.getArgs
-      _    <- ZIO.when(args.find( _ == "--debug").isDefined )( ZIO.attempt(QuartzH2Server.setLoggingLevel( Level.DEBUG )) )
-      _    <- ZIO.when(args.find( _ == "--error").isDefined )( ZIO.attempt(QuartzH2Server.setLoggingLevel( Level.ERROR )) )
-      _    <- ZIO.when(args.find( _ == "--off").isDefined )( ZIO.attempt(QuartzH2Server.setLoggingLevel( Level.OFF )) )
+      _ <- ZIO.when(args.find(_ == "--debug").isDefined)(ZIO.attempt(QuartzH2Server.setLoggingLevel(Level.DEBUG)))
+      _ <- ZIO.when(args.find(_ == "--error").isDefined)(ZIO.attempt(QuartzH2Server.setLoggingLevel(Level.ERROR)))
+      _ <- ZIO.when(args.find(_ == "--trace").isDefined)(ZIO.attempt(QuartzH2Server.setLoggingLevel(Level.TRACE)))
+      _ <- ZIO.when(args.find(_ == "--off").isDefined)(ZIO.attempt(QuartzH2Server.setLoggingLevel(Level.OFF)))
 
       ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
       exitCode <- new QuartzH2Server(

@@ -465,7 +465,7 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
 
       _ <- ZIO.attempt(f_SSL.engine.setHandshakeApplicationProtocolSelector((eng, list) => {
         if (list.asScala.find(_ == "h2").isDefined) "h2"
-        else "" // application protocol indications will not be used
+        else "http/1.1" //falback to 1.1 
       }))
 
       x <- doHandshake()
