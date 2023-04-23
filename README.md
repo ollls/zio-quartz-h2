@@ -18,7 +18,7 @@ to run example from zio-quartz-h2 code base directly
 sbt IO/run
 ```
 
-### Loggng
+### Logging.
 
 Use .../src/main/resources/logback-test.xml to tailor to your specific requirements.
 
