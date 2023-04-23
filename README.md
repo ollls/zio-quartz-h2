@@ -38,7 +38,7 @@ https://github.com/ollls/zio-quartz-demo
 * You may look at the quartz-h2 CATS port https://github.com/ollls/quartz-h2
 <br>
 
-* Standard support for ZIO Environment.
+### Standard support for ZIO Environment.
 
 ```scala
 
@@ -52,7 +52,7 @@ def run =
 
 ```
 
-* Web filter.
+### Web filter.
 
 ```scala
 
