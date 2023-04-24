@@ -18,7 +18,19 @@ to run example from zio-quartz-h2 code base directly
 sbt IO/run
 ```
 
-* 0.5.4 template example: client/server (quartz-h2 HTTP/2 client only supports TLS with ALPN H2 HTTP/2 hosts)<br>
+### Logging.
+
+Use .../src/main/resources/logback-test.xml to tailor to your specific requirements.
+
+Also you may use options to control logging level.
+```
+sbt "run --debug"
+sbt "run --error"
+sbt "run --off"
+```
+
+
+### 0.5.4 template example: client/server (quartz-h2 HTTP/2 client only supports TLS with ALPN H2 HTTP/2 hosts)<br>
 https://github.com/ollls/zio-quartz-demo
 * Template project with use cases, `sbt run`:<br>https://github.com/ollls/zio-qh2-examples
 * Use cases:<br> https://github.com/ollls/zio-quartz-h2/blob/master/examples/IO/src/main/scala/Run.scala, to run: `sbt IO/run`
@@ -26,7 +38,7 @@ https://github.com/ollls/zio-quartz-demo
 * You may look at the quartz-h2 CATS port https://github.com/ollls/quartz-h2
 <br>
 
-* Standard support for ZIO Environment.
+### Standard support for ZIO Environment.
 
 ```scala
 
@@ -40,7 +52,7 @@ def run =
 
 ```
 
-* Web filter.
+### Web filter.
 
 ```scala
 
@@ -55,7 +67,7 @@ exitCode <- new QuartzH2Server("localhost", 8443, 16000, ctx).startIO(R, filter,
 
 ```
 
-* File retrieval.
+### File retrieval.
 
 ```scala 
 
@@ -75,7 +87,7 @@ case GET -> Root / StringVar(file) =>
 
 ```
 
-* File upload ( smart http2 flow control implemented if disk saving speed cannot keep up with inbound network data.) 
+### File upload ( smart http2 flow control implemented if disk saving speed cannot keep up with inbound network data.) 
 
 ```scala 
 
@@ -88,7 +100,7 @@ case GET -> Root / StringVar(file) =>
       } yield (Response.Ok().asText("OK"))
         
 ```        
-* HTTP Multipart file upload.
+### HTTP Multipart file upload.
 
 ```scala
 
@@ -97,7 +109,7 @@ case GET -> Root / StringVar(file) =>
 
 ```
 
-* How to send data in separate H2 packets of various size
+### How to send data in separate H2 packets of various size
 
 ```scala 
 
@@ -107,7 +119,7 @@ case GET -> Root / StringVar(file) =>
       
 ````      
 
-* How to run h2spec.
+### How to run h2spec.
 
 1. Start server with "sbt IO/run"<br>
 2. ./h2spec http2 -h localhost -p 8443 -t -k<br>
@@ -117,7 +129,7 @@ You should get:
 Finished in 2.1959 seconds
 94 tests, 94 passed, 0 skipped, 0 failed<br>
 ```
-* Performance test with h2load.
+### Performance test with h2load.
 
 ```
 h2load -D10 -c68 -m30 -t2 https://localhost:8443/test
