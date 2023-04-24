@@ -27,10 +27,14 @@ object MyApp extends ZIOAppDefault {
 
   override val bootstrap = zio.Runtime.removeDefaultLoggers ++ SLF4J.slf4j ++ zio.Runtime.enableWorkStealing
 
-  val filter: WebFilter = (r: Request) =>
-    ZIO
-      .succeed(Response.Error(StatusCode.Forbidden).asText("Denied: " + r.uri.getPath()))
-      .when(r.uri.getPath().endsWith("test70.jpeg"))
+  val filter: WebFilter[Any] = (request: Request) =>
+    ZIO.attempt(
+      Either.cond(
+        !request.uri.getPath().endsWith("na.txt"),
+        request.hdr("test_tid" -> "ABC123Z9292827"),
+        Response.Error(StatusCode.Forbidden).asText("Denied: " + request.uri.getPath())
+      )
+    )
 
   val R: HttpRouteIO[String] =
     case req @ GET -> Root / "ldt" =>

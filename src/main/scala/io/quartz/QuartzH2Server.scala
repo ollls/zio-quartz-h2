@@ -333,7 +333,7 @@ class QuartzH2Server[Env](
 
   def startIO(
       pf: HttpRouteIO[Env],
-      filter: WebFilter = (r0: Request) => ZIO.succeed(None),
+      filter: WebFilter[Env] = (r0: Request) => ZIO.succeed(Right(r0)),
       sync: Boolean
   ): ZIO[Env, Throwable, ExitCode] = {
     start(Routes.of[Env](pf, filter), sync)

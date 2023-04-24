@@ -13,14 +13,81 @@ sealed case class Request(
     sniServerNames: Option[Array[String]],
     trailingHeaders: Promise[Throwable, Headers]
 ) {
+
+  /** Adds the specified headers to the request headers.
+    *
+    * @param hdr
+    *   the headers to add
+    * @return
+    *   a new request with the additional headers
+    */
+  def hdr(hdr: Headers): Request =
+    new Request(connId, streamId, headers ++ hdr, this.stream, secure, sniServerNames, this.trailingHeaders)
+
+  /** Adds the specified header pair to the request headers.
+    *
+    * @param pair
+    *   a tuple containing the header name and value
+    * @return
+    *   a new request with the additional header pair
+    */
+  def hdr(pair: (String, String)): Request =
+    new Request(connId, streamId, headers + pair, this.stream, secure, sniServerNames, this.trailingHeaders)
+
+    /** Returns the path component of the request URI.
+      *
+      * @return
+      *   the path component of the request URI
+      */
   def path: String = headers.get(":path").getOrElse("")
+
+  /** Returns the HTTP method used in the request.
+    *
+    * @return
+    *   the HTTP method used in the request
+    */
   def method: Method = Method(headers.get(":method").getOrElse(""))
-  def contentLen: String = headers.get("content-length").getOrElse("0") // keep it string
+
+  /** Returns the content length of the request body as a string.
+    *
+    * @return
+    *   the content length of the request body as a string
+    */
+  def contentLen: String = headers.get("content-length").getOrElse("0")
+
+  /** Returns the URI of the request.
+    *
+    * @return
+    *   the URI of the request
+    */
   def uri: URI = new URI(path)
+
+  /** Returns the content type of the request body.
+    *
+    * @return
+    *   the content type of the request body
+    */
   def contentType: ContentType = ContentType(headers.get("content-type").getOrElse(""))
+
+  /** Returns `true` if the content type of the request body is JSON.
+    *
+    * @return
+    *   `true` if the content type of the request body is JSON
+    */
   def isJSONBody: Boolean = contentType == ContentType.JSON
 
+  /** Returns the transfer encoding used in the request.
+    *
+    * @return
+    *   the transfer encoding used in the request
+    */
   def transferEncoding = headers.getMval("transfer-encoding")
+
+  /** Returns the request body as a byte array.
+    *
+    * @return
+    *   the request body as a byte array
+    */
 
   def body = stream.runCollect.map(chunk => chunk.toArray) // .compile.toVector.map( _.toArray  )
 }
