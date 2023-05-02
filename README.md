@@ -52,6 +52,7 @@ def run =
 
 ```
 ### Webfilter support with Either[Response, Request]. Provide filter as a parameter QuartzH2Server()
+
 ```scala
 
 val filter: WebFilter = (request: Request) =>
@@ -63,6 +64,8 @@ val filter: WebFilter = (request: Request) =>
     )
  )    
 ```
+
+```scala
 
 exitCode <- new QuartzH2Server("localhost", 8443, 16000, ctx).startIO(R, filter, sync = false)
 
