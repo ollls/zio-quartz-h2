@@ -51,17 +51,18 @@ def run =
     } yield (exitCode)).provideSomeLayer( env )
 
 ```
-
-### Web filter.
-
+### Webfilter support with Either[Response, Request]. Provide filter as a parameter QuartzH2Server()
 ```scala
 
-val filter: WebFilter = (r: Request) =>
-    ZIO
-      .succeed(Response.Error(StatusCode.Forbidden).asText("Denied: " + r.uri.getPath()))
-      .when(r.uri.getPath().endsWith("test70.jpeg"))
-   
-...
+val filter: WebFilter = (request: Request) =>
+  ZIO.attempt(
+    Either.cond(
+     !request.uri.getPath().startsWith("/private"),
+     request.hdr("test_tid" -> "ABC123Z9292827"),
+     Response.Error(StatusCode.Forbidden).asText("Denied: " + request.uri.getPath())
+    )
+ )    
+```
 
 exitCode <- new QuartzH2Server("localhost", 8443, 16000, ctx).startIO(R, filter, sync = false)
 
