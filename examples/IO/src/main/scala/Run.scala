@@ -1,6 +1,6 @@
 package example
 
-import zio.{ZIO, Task, Chunk, Promise, ExitCode, ZIOApp, ZLayer}
+import zio.{ZIO, Task, Chunk, Promise, ExitCode, ZIOApp, ZLayer, ZIOAppArgs}
 import zio.ZIOAppDefault
 import zio.stream.{ZStream, ZPipeline, ZSink}
 import io.quartz.QuartzH2Server
@@ -128,7 +128,7 @@ object MyApp extends ZIOAppDefault {
         .Ok()
         .asStream(ZStream.fromFile(jpath, BLOCK_SIZE))
         .contentType(ContentType.contentTypeFromFileName(FILE)))
-    }      
+  }
 
   def onConnect(id: Long) = {
     ZIO.logTrace(s"connected - $id")
@@ -141,11 +141,11 @@ object MyApp extends ZIOAppDefault {
   def run = {
     val env = ZLayer.fromZIO(ZIO.succeed("Hello ZIO World!"))
     (for {
-      //args <- this.getArgs
-      //_ <- ZIO.when(args.find(_ == "--debug").isDefined)(ZIO.attempt(QuartzH2Server.setLoggingLevel(Level.DEBUG)))
-      //_ <- ZIO.when(args.find(_ == "--error").isDefined)(ZIO.attempt(QuartzH2Server.setLoggingLevel(Level.ERROR)))
-      //_ <- ZIO.when(args.find(_ == "--trace").isDefined)(ZIO.attempt(QuartzH2Server.setLoggingLevel(Level.TRACE)))
-      //_ <- ZIO.when(args.find(_ == "--off").isDefined)(ZIO.attempt(QuartzH2Server.setLoggingLevel(Level.OFF)))
+      args <- this.getArgs
+      _ <- ZIO.when(args.find(_ == "--debug").isDefined)(ZIO.attempt(QuartzH2Server.setLoggingLevel(Level.DEBUG)))
+      _ <- ZIO.when(args.find(_ == "--error").isDefined)(ZIO.attempt(QuartzH2Server.setLoggingLevel(Level.ERROR)))
+      _ <- ZIO.when(args.find(_ == "--trace").isDefined)(ZIO.attempt(QuartzH2Server.setLoggingLevel(Level.TRACE)))
+      _ <- ZIO.when(args.find(_ == "--off").isDefined)(ZIO.attempt(QuartzH2Server.setLoggingLevel(Level.OFF)))
 
       ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
 
@@ -158,7 +158,7 @@ object MyApp extends ZIOAppDefault {
         onDisconnect = onDisconnect
       ).startIO(R, filter, sync = false)
 
-    } yield (exitCode)).provideSomeLayer(env)
+    } yield (exitCode)).provideSomeLayer[ZIOAppArgs](env)
   }
 
 }
