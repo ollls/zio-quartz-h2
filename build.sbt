@@ -1,7 +1,7 @@
 import Dependencies._
 
-ThisBuild / scalaVersion := "3.2.2"
-ThisBuild / version := "0.5.4"
+ThisBuild / scalaVersion := "2.13.10"
+ThisBuild / version := "0.5.5"
 ThisBuild / organization := "io.github.ollls"
 ThisBuild / organizationName := "ollls"
 ThisBuild / versionScheme := Some("early-semver")
@@ -67,8 +67,7 @@ scalacOptions ++= Seq(
   // "-Wunused:imports",
   // "-Xfatal-warnings",
   "-deprecation",
-  "-feature",
-  "-no-indent"
+  "-feature"
 )
 
 testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")

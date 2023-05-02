@@ -4,12 +4,12 @@ import zio.{ZIO, Task}
 import zio.stream.ZStream
 import io.quartz.http2.model.{Request, Response, Headers, StatusCode, Method}
 
-
-type HttpRoute[Env] = Request => ZIO[Env, Throwable, Option[Response]]
-type WebFilter[Env] = Request => ZIO[Env, Throwable, Either[Response, Request]]
-type HttpRouteIO[Env] = PartialFunction[Request, ZIO[Env, Throwable, Response]]
-
 object Routes {
+
+  type HttpRoute[Env] = Request => ZIO[Env, Throwable, Option[Response]]
+  type WebFilter[Env] = Request => ZIO[Env, Throwable, Either[Response, Request]]
+  type HttpRouteIO[Env] = PartialFunction[Request, ZIO[Env, Throwable, Response]]
+
   // route withot environment, gives direct HttpRoute
   def of[Env](pf: HttpRouteIO[Env], filter: WebFilter[Env]): HttpRoute[Env] = {
     val route = (request: Request) =>

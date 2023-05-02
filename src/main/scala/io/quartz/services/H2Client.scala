@@ -14,7 +14,7 @@ object H2Client {
 
 class H2Client {
 
-  private val connectionTbl = ConcurrentHashMap[Long, Array[Http2ClientConnection]](100).asScala
+  private val connectionTbl = new ConcurrentHashMap[Long, Array[Http2ClientConnection]](100).asScala
 
   /** Opens an HTTP/2 connection to the specified URL host using the given SSL context.
     *

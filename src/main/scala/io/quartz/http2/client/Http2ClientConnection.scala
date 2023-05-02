@@ -18,7 +18,7 @@ import java.util.concurrent.Executors
 import scala.concurrent.ExecutionContext
 import zio.{ZIO, Task, Promise, Queue, Fiber, Chunk, Ref, Semaphore}
 import zio.stream.{ZStream, ZChannel, ZPipeline}
-import io.quartz.http2.routes.HttpRoute
+import io.quartz.http2.routes.Routes._
 import concurrent.duration.DurationInt
 import java.net.URI
 import Http2ClientConnection.EmptyStream
@@ -32,7 +32,7 @@ case class ClientResponse(
 
   def body = stream.runCollect.map(_.toArray)
 
-  def bodyAsText = body.map(String(_))
+  def bodyAsText = body.map(new String(_))
 }
 
 object Http2ClientConnection {
@@ -71,7 +71,7 @@ object Http2ClientConnection {
       hSem2 <- Semaphore.make(permits = 1)
       awaitSettings <- Promise.make[Throwable, Boolean]
       settings0 <- Ref.make(
-        Http2Settings()
+        new Http2Settings()
       ) // will be loaded with server data when awaitSettings is completed
       inboundWindow <- Ref.make[Long](incomingWindowSize)
       globalBytesOfPendingInboundData <- Ref.make(0L)
@@ -79,7 +79,7 @@ object Http2ClientConnection {
         65535L
       ) // set in upddateInitialWindowSizeAllStreams
     } yield (
-      Http2ClientConnection(
+      new Http2ClientConnection(
         ch,
         timeOutMs,
         uri,
@@ -149,7 +149,7 @@ class Http2ClientConnection(
       hSem2
     ) {
 
-  import scala.jdk.CollectionConverters.*
+
   class Http2ClientStream(
       val streamId: Int,
       val d: Promise[Throwable, (Byte, Headers)],
@@ -162,7 +162,7 @@ class Http2ClientConnection(
   ) extends Http2StreamCommon(bytesOfPendingInboundData, inboundWindow, transmitWindow, outXFlowSync)
 
   val streamTbl =
-    java.util.concurrent.ConcurrentHashMap[Int, Http2ClientStream](100).asScala
+    new java.util.concurrent.ConcurrentHashMap[Int, Http2ClientStream](100).asScala
 
   def getStream(id: Int): Option[Http2StreamCommon] = streamTbl.get(id)
 
@@ -176,7 +176,7 @@ class Http2ClientConnection(
       65535L
     ) // set in upddateInitialWindowSizeAllStreams
     xFlowSync <- Queue.unbounded[Boolean]
-  } yield (Http2ClientStream(
+  } yield (new Http2ClientStream(
     streamId,
     d,
     header,
@@ -386,7 +386,7 @@ class Http2ClientConnection(
     _ <- inBoundWorker(ch, timeOutMs).fork // init incoming packet reader
     _ <- ch.write(Constants.getPrefaceBuffer())
 
-    s <- ZIO.succeed(Http2Settings()).tap(s => ZIO.succeed { s.INITIAL_WINDOW_SIZE = INITIAL_WINDOW_SIZE })
+    s <- ZIO.succeed( new Http2Settings()).tap(s => ZIO.succeed { s.INITIAL_WINDOW_SIZE = INITIAL_WINDOW_SIZE })
 
     _ <- sendFrame(Frames.makeSettingsFrameClient(ack = false, s))
 

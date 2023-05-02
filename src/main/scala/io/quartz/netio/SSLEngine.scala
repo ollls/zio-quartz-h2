@@ -31,14 +31,16 @@ final class SSLEngine(val engine: JSSLEngine) {
   def setNeedClientAuth(use: Boolean) =
     ZIO.attempt(engine.setNeedClientAuth(use))
 
-  def getDelegatedTask() = ZIO.attemptBlocking {
+
+  def getDelegatedTask() = ZIO.attemptBlocking  {
     var task: Runnable = null
-    while {
-      task = engine.getDelegatedTask();
-      task != null
-    }
-    do task.run()
+    do {
+      task = engine.getDelegatedTask()
+      if (task != null) task.run()
+
+    } while (task != null)
   }
+
 
   def getHandshakeStatus(): Task[SSLEngineResult.HandshakeStatus] =
     ZIO.attempt(engine.getHandshakeStatus())

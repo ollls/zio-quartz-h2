@@ -9,12 +9,11 @@ import zio.logging.backend.SLF4J
 
 import io.quartz.QuartzH2Server
 import io.quartz.QuartzH2Client
-import io.quartz.http2.routes.HttpRouteIO
+import io.quartz.http2.routes.Routes._
 import io.quartz.http2.model.{Headers, Method, ContentType, Request, Response}
 import io.quartz.http2.model.Method._
 import io.quartz.http2._
 import ch.qos.logback.classic.Level
-import io.quartz.http2.routes.WebFilter
 import io.quartz.http2.model.StatusCode
 
 object HelloWorldSpec extends ZIOSpecDefault {

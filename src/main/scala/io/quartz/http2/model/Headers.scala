@@ -6,8 +6,6 @@ import scala.collection.mutable.StringBuilder
 
 import java.lang.Character
 
-
-
 object Headers {
 
   val http2Hdrs = HashSet(":method", ":path", ":authority", ":scheme", ":status")
@@ -53,7 +51,7 @@ class Headers(val tbl: HashMap[String, List[String]]) {
     new Headers(tbl_u)
   }
 
-  def drop( key: String ) : Headers = new Headers( tbl.removed(key ) )
+  def drop(key: String): Headers = new Headers(tbl.removed(key))
 
   def get(key: String): Option[String] = tbl.get(key).map(set => set.head)
 
@@ -73,23 +71,27 @@ class Headers(val tbl: HashMap[String, List[String]]) {
     lines.toString()
   }
 
-    def printHeaders( separator : String): String = {
+  def printHeaders(separator: String): String = {
     val ZT = new StringBuilder()
 
     val lines = tbl.foldLeft(ZT) {
-      ((lines, kv) => kv._2.foldLeft(lines)((lz, val2) => lz.append(kv._1 + ": " + val2.toString + separator )))
+      ((lines, kv) => kv._2.foldLeft(lines)((lz, val2) => lz.append(kv._1 + ": " + val2.toString + separator)))
     }
     lines.toString()
   }
 
   def ensureLowerCase: Boolean =
-    tbl.forall((key, _) => key.forall(c => !Character.isLetter(c) || Character.isLowerCase(c)))
+    tbl.forall { case (key, _) =>
+      key.forall(c => !Character.isLetter(c) || Character.isLowerCase(c))
+    }
 
   def isPseudoHeadersPresent: Boolean =
-    tbl.forall((key, _) => !key.startsWith(":"))
+    tbl.forall { case (key, _) => !key.startsWith(":") }
 
   def validatePseudoHeaders: Boolean = {
-    val test1 = tbl.forall((key, _) => if (!key.startsWith(":")) true else Headers.http2Hdrs_request.contains(key))
+    val test1 = tbl.forall { case (key, _) =>
+      if (!key.startsWith(":")) true else Headers.http2Hdrs_request.contains(key)
+    }
 
     val test2 = tbl.get(":path") match {
       case Some(val0) => if (val0.size > 1 || val0.head.isBlank()) false else true

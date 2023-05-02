@@ -5,7 +5,7 @@ import io.quartz.util.ResponseWriters11
 import io.quartz.util.Chunked11
 import io.quartz.http2.Constants.ErrorGen
 import io.quartz.http2.Constants.Error
-import io.quartz.http2.routes.HttpRoute
+import io.quartz.http2.routes.Routes._
 import io.quartz.util.Utils
 
 import zio.{ZIO, Task, Chunk, Promise, Ref}
@@ -31,13 +31,15 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
     ZIO.logDebug("Http11Connection.shutdown")
 
   def translateHeadersFrom11to2(headers: Headers): Headers = {
-    val map = headers.tbl.map((k, v) => {
-      val k1 = k.toLowerCase() match {
-        case "host"    => ":authority"
-        case k: String => k
+    val map = headers.tbl.map {
+      case (k, v) => {
+        val k1 = k.toLowerCase() match {
+          case "host"    => ":authority"
+          case k: String => k
+        }
+        (k1, v)
       }
-      (k1, v)
-    })
+    }
 
     new Headers(map)
   }
@@ -119,7 +121,9 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
     )
 
     response_o <- (httpRoute(request)).catchAll {
-      case e: (java.io.FileNotFoundException | java.nio.file.NoSuchFileException) =>
+      case e: (java.io.FileNotFoundException) =>
+        ZIO.logError(e.toString) *> ZIO.succeed(None)
+      case e: (java.nio.file.NoSuchFileException) =>
         ZIO.logError(e.toString) *> ZIO.succeed(None)
       case e =>
         ZIO.logError(e.toString) *>

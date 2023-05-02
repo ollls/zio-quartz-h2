@@ -111,7 +111,7 @@ object Response {
 sealed case class Response(
     code: StatusCode,
     headers: Headers,
-    stream: ZStream[Any, Throwable, Byte] = EmptyStream
+    stream: ZStream[Any, Throwable, Byte] = Response.EmptyStream
 ) {
 
   def hdr(hdr: Headers): Response = new Response(this.code, this.headers ++ hdr, this.stream)

@@ -6,7 +6,7 @@ import zio.{ZIO, Task, Promise, Queue, Chunk, Ref, Semaphore}
 import io.quartz.http2.model.{Request, Response, Headers, ContentType, StatusCode}
 import io.quartz.http2.Constants._
 
-trait Http2ConnectionCommon(
+ abstract class Http2ConnectionCommon(
     val INITIAL_WINDOW_SIZE: Int,
     val globalBytesOfPendingInboundData: Ref[Long],
     val globalInboundWindow: Ref[Long],

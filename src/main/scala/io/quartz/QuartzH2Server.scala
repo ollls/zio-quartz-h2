@@ -33,10 +33,9 @@ import java.nio.file.Files
 import io.quartz.http2.model.{Headers, Method, ContentType, Request, Response}
 import io.quartz.http2.model.Method._
 import io.quartz.http2._
-import io.quartz.http2.routes.HttpRoute
-import io.quartz.http2.routes.WebFilter
 import io.quartz.http2.routes.Routes
-import io.quartz.http2.routes.HttpRouteIO
+import io.quartz.http2.routes.Routes._
+
 import io.quartz.util.Utils
 
 import java.net._
@@ -115,8 +114,8 @@ class QuartzH2Server[Env](
     h2IdleTimeOutMs: Int,
     sslCtx: SSLContext,
     incomingWinSize: Int = 65535,
-    onConnect: Long => ZIO[Env, Throwable, Unit] = _ => ZIO.unit,
-    onDisconnect: Long => ZIO[Env, Nothing, Unit] = _ => ZIO.unit
+    onConnect: Long => ZIO[Env, Throwable, Unit] = { id: Long => ZIO.unit },
+    onDisconnect: Long => ZIO[Env, Nothing, Unit] = { id: Long => ZIO.unit }
 ) {
   val MAX_HTTP_HEADER_SZ = 16384
   val HTTP1_KEEP_ALIVE_MS = 20000
@@ -222,7 +221,7 @@ class QuartzH2Server[Env](
         if (isOK == false) {
           doConnectUpgrade(ch, id, maxStreams, keepAliveMs, route, buf)
         } else
-          ZIO.scoped {
+          ZIO.scoped[Env] {
             ZIO
               .acquireRelease(Http2Connection.make(ch, id, maxStreams, keepAliveMs, route, incomingWinSize, None))(c =>
                 onDisconnect(c.id) *> c.shutdown.catchAll(_ => ZIO.unit)
@@ -268,7 +267,7 @@ class QuartzH2Server[Env](
       if (upd != "h2c") for {
         c <- Http11Connection.make(ch, id, keepAliveMs, route)
         refStart <- Ref.make(true)
-        _ <- ZIO.scoped {
+        _ <- ZIO.scoped[Env] {
           ZIO
             .acquireRelease(ZIO.succeed(c))(c => onDisconnect(c.id) *> c.shutdown.catchAll(_ => ZIO.unit))
             .tap(c => onConnect(c.id))
@@ -289,7 +288,7 @@ class QuartzH2Server[Env](
               ZIO.fail(
                 new BadProtocol(ch, "Cannot see HTTP2 Preface, bad protocol")
               )
-          _ <- ZIO.scoped {
+          _ <- ZIO.scoped[Env] {
             ZIO
               .acquireRelease(ZIO.succeed(c))(c => onDisconnect(c.id) *> c.shutdown.catchAll(_ => ZIO.unit))
               .tap(c => onConnect(c.id))
@@ -303,10 +302,8 @@ class QuartzH2Server[Env](
     if (shutdownFlag == false) {
       e match {
         case BadProtocol(ch, e) =>
-          ch.write(Frames.mkGoAwayFrame(0, Error.PROTOCOL_ERROR, e.getBytes))
-          /*ch.write(ByteBuffer.wrap(responseStringNo11().getBytes))*/ *> ZIO.logError(
-            e.toString
-          )
+          ch.write(Frames.mkGoAwayFrame(0, Error.PROTOCOL_ERROR, e.getBytes)) *> ZIO.logError(e.toString)
+
         case e: java.nio.channels.InterruptedByTimeoutException =>
           ZIO.logInfo("Remote peer disconnected on timeout")
         case _ => ZIO.logError("errorHandler: " + e.toString)
@@ -411,7 +408,7 @@ class QuartzH2Server[Env](
             s"Connect from remote peer: ${hostName(c.ch.getRemoteAddress())}"
           )
         )
-        .flatMap(ch => ZIO.attempt(TLSChannel(sslCtx, ch)))
+        .flatMap(ch => ZIO.attempt(new TLSChannel(sslCtx, ch)))
 
       ch0 <- accept
         .flatMap((c => c.ssl_init_h2().map((c, _)).catchAll(e => c.close().ignore *> ZIO.fail(e))))
@@ -423,7 +420,7 @@ class QuartzH2Server[Env](
         )
         .tap(_ => conId.update(_ + 1))
         .flatMap(ch1 =>
-          ZIO.scoped {
+          ZIO.scoped[Env] {
             ZIO
               .acquireRelease(ZIO.succeed(ch1))(t => t._1.close().ignore)
               .flatMap(t =>
@@ -454,7 +451,7 @@ class QuartzH2Server[Env](
 
       conId <- Ref.make(0L)
 
-      server_ch: SSLServerSocket <- ZIO.attempt(
+      server_ch <- ZIO.attempt(
         sslCtx.getServerSocketFactory().createServerSocket(PORT, 0, addr.getAddress()).asInstanceOf[SSLServerSocket]
       )
 
@@ -477,7 +474,7 @@ class QuartzH2Server[Env](
 
       ch0 <- accept
         .flatMap(ch1 =>
-          ZIO.scoped {
+          ZIO.scoped[Env] {
             ZIO
               .acquireRelease(ZIO.succeed(ch1))(_.close().ignore)
               .flatMap(ch => doConnect(ch, conId, maxStreams, keepAliveMs, R, Chunk.empty[Byte]))
@@ -530,7 +527,7 @@ class QuartzH2Server[Env](
       ch0 <- accept
         .tap(_ => conId.update(_ + 1))
         .flatMap(ch1 =>
-          ZIO.scoped {
+          ZIO.scoped[Env] {
             ZIO
               .acquireRelease(ZIO.succeed(ch1))(t => t.close().ignore)
               .flatMap(t =>

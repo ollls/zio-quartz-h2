@@ -9,14 +9,14 @@ import io.quartz.netio._
 import scala.collection.mutable
 import concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.MapHasAsScala
-import io.quartz.http2.routes.Routes
+import io.quartz.http2.routes.Routes._
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.Executors
 import scala.concurrent.ExecutionContext
 
 import zio.{ZIO, Task, Promise, Queue, Chunk, Ref, Semaphore}
 import zio.stream.{ZStream, ZChannel, ZPipeline}
-import io.quartz.http2.routes.HttpRoute
+import io.quartz.http2.routes._
 
 object Http2Connection {
   private[this] def outBoundWorkerProc(
@@ -43,7 +43,7 @@ object Http2Connection {
       httpRoute: HttpRoute[Env],
       in_winSize: Int,
       http11request: Option[Request]
-  ): Task[Http2Connection[Env]] = {
+  ): ZIO[Env, Throwable, Http2Connection[Env]] = {
     for {
       _ <- ZIO.logDebug("Http2Connection.make()")
       shutdownPromise <- Promise.make[Throwable, Boolean]
@@ -126,13 +126,13 @@ object Http2Connection {
   ): Task[ByteBuffer] = {
     for {
       bb <- q.take
-      _ <- ZIO.when(bb == null || bb.remaining() == 0)(ZIO.fail(java.nio.channels.ClosedChannelException()))
+      _ <- ZIO.when(bb == null || bb.remaining() == 0)(ZIO.fail(new java.nio.channels.ClosedChannelException()))
       tp <- ZIO.attempt(parseFrame(bb))
       streamId = tp._4
       len = tp._1
       o_stream <- ZIO.attempt(c.getStream((streamId)))
       _ <- ZIO.when(o_stream.isEmpty)(ZIO.fail(ErrorGen(streamId, Error.FRAME_SIZE_ERROR, "invalid stream id")))
-      stream: Http2StreamCommon <- ZIO.attempt(o_stream.get)
+      stream <- ZIO.attempt(o_stream.get)
       //////////////////////////////////////////////////////////////////////////////////////////////////////////
       _ <- windowsUpdate[Env](c, 0, c.globalBytesOfPendingInboundData, c.globalInboundWindow, len)
       _ <- windowsUpdate[Env](c, streamId, stream.bytesOfPendingInboundData, stream.inboundWindow, len)
@@ -197,7 +197,7 @@ object Http2Connection {
     ZPipeline.fromChannel(go(Chunk.empty[Byte]))
   }
 
-  private[this] def makePacketStream(
+  def makePacketStream(
       ch: IOChannel,
       keepAliveMs: Int,
       leftOver: Chunk[Byte]
@@ -213,7 +213,7 @@ object Http2Connection {
   }
 }
 
-trait Http2StreamCommon(
+class Http2StreamCommon(
     val bytesOfPendingInboundData: Ref[Long],
     val inboundWindow: Ref[Long],
     val transmitWindow: Ref[Long],
@@ -271,7 +271,7 @@ class Http2Connection[Env](
 
   var concurrentStreams = new AtomicInteger(0)
 
-  val streamTbl = java.util.concurrent.ConcurrentHashMap[Int, Http2Stream](100).asScala
+  val streamTbl = new java.util.concurrent.ConcurrentHashMap[Int, Http2Stream](100).asScala
   def getStream(id: Int): Option[Http2StreamCommon] = streamTbl.get(id)
 
   var start = true
@@ -385,7 +385,7 @@ class Http2Connection[Env](
       case Some(cl) =>
         c.contentLenFromHeader
           .succeed(try { Some(cl.toInt) }
-          catch case e: java.lang.NumberFormatException => None)
+          catch { case e: java.lang.NumberFormatException => None })
           .unit
 
       case None => c.contentLenFromHeader.succeed(None).unit
@@ -424,7 +424,7 @@ class Http2Connection[Env](
       active <- Ref.make(true)
 
       c <- ZIO.attempt(
-        Http2Stream(
+        new Http2Stream(
           active,
           d,
           header,
@@ -483,7 +483,7 @@ class Http2Connection[Env](
       active <- Ref.make(true)
 
       c <- ZIO.attempt(
-        Http2Stream(
+        new Http2Stream(
           active,
           d,
           header,
@@ -698,8 +698,12 @@ class Http2Connection[Env](
       )
 
       response_o <- (httpRoute(request)).catchAll {
-        case e: (java.io.FileNotFoundException | java.nio.file.NoSuchFileException) =>
+        case e: (java.io.FileNotFoundException) =>
           ZIO.logError(e.toString) *> ZIO.succeed(None)
+
+        case e: (java.nio.file.NoSuchFileException) =>
+          ZIO.logError(e.toString) *> ZIO.succeed(None)
+
         case e =>
           ZIO.logError(e.toString) *>
             ZIO.succeed(Some(Response.Error(StatusCode.InternalServerError)))
@@ -805,8 +809,7 @@ class Http2Connection[Env](
 
   def processIncoming(leftOver: Chunk[Byte]): ZIO[Env, Nothing, Unit] = (for {
     _ <- ZIO.logTrace(s"Http2Connection.processIncoming() leftOver= ${leftOver.size}")
-    _ <- Http2Connection
-      .makePacketStream(ch, HTTP2_KEEP_ALIVE_MS, leftOver)
+    _ <- Http2Connection.makePacketStream(ch, HTTP2_KEEP_ALIVE_MS, leftOver)
       .foreach(packet => { packet_handler(httpReq11, packet) })
   } yield ()).catchAll {
     case e @ TLSChannelError(_) =>
@@ -988,8 +991,8 @@ class Http2Connection[Env](
                 headersEnded <- haveHeadersEnded(streamId)
                 closed <- hasEnded(streamId)
 
-                t1: Long <- ZIO.succeed(packet.size.toLong - padLen - Constants.HeaderSize - padByte)
-                t2: Long <- ZIO.succeed(len.toLong - padByte - padLen)
+                t1 <- ZIO.succeed(packet.size.toLong - padLen - Constants.HeaderSize - padByte)
+                t2 <- ZIO.succeed(len.toLong - padByte - padLen)
                 _ <- ZIO.when(t1 != t2)(
                   ZIO.fail(ErrorGen(streamId, Error.PROTOCOL_ERROR, "DATA frame with invalid pad length"))
                 )

@@ -393,9 +393,9 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
     for {
       _ <- f_SSL.setUseClientMode(true)
       sslParameters <- ZIO.attempt(f_SSL.engine.getSSLParameters())
-      sniList: java.util.List[SNIServerName] <- ZIO.attempt(
+      sniList <- ZIO.attempt(
         Array(sniServerName)
-          .map(SniName(_))
+          .map(new SniName(_))
           .foldLeft(new java.util.ArrayList[SNIServerName]())((list, item) => { list.add(item); list })
       )
       _ <- ZIO.attempt(sslParameters.setServerNames(sniList))
@@ -442,7 +442,7 @@ class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
   private class QuartzSNIMatcher extends SNIMatcher(0) {
     // def matches​( serveName: SNIServerName ): Boolean = true
     def matches(name: SNIServerName): Boolean = {
-      sni_hosts.append(String(name.getEncoded()))
+      sni_hosts.append( new String(name.getEncoded()))
       true
     }
   }
