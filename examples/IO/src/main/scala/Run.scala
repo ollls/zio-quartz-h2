@@ -20,6 +20,8 @@ import zio.LogLevel
 import io.quartz.util.MultiPart
 import io.quartz.http2.model.StatusCode
 
+import io.quartz.websocket.Websocket
+
 object param1 extends QueryParam("param1")
 object param2 extends QueryParam("param2")
 
@@ -37,6 +39,21 @@ object MyApp extends ZIOAppDefault {
     )
 
   val R: HttpRouteIO[String] =
+    case req @ GET -> Root / "ws-test" =>
+      if (req.isWebSocket) {
+        val wsctx = Websocket()
+        val ws_stream = wsctx.receiveTextAsStream(req)
+        for {
+          _ <- wsctx.accept(req)
+          _ <- ws_stream.foreach { frame =>
+            ZIO.logDebug( s" ${frame.opcode} Data from websocket <<< " + new String(frame.data.toArray)) *>
+              wsctx.sendAsTextStream(
+                req,
+                ZStream("Websocket Rocks, this will be one packet with size: " + Websocket.WS_PACKET_SZ)
+              )
+          }
+        } yield (Response.Ok())
+      } else ZIO.succeed(Response.Error(StatusCode.NotFound))
     case req @ GET -> Root / "ldt" =>
       for {
         time <- ZIO.succeed(java.time.LocalDateTime.now())

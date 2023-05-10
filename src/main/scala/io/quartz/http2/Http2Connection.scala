@@ -516,6 +516,7 @@ class Http2Connection[Env](
             } else Http2Connection.makeDataStream(this, dataIn),
             ch.secure(),
             ch.sniServerNames(),
+            None,
             trailingHdr
           )
         )
@@ -1206,7 +1207,7 @@ class Http2Connection[Env](
                         val stream = x.stream
                         val th = x.trailingHeaders
                         val h = x.headers.drop("connection")
-                        this.openStream11(1, Request(id, 1, h, stream, ch.secure(), ch.sniServerNames(), th))
+                        this.openStream11(1, Request(id, 1, h, stream, ch.secure(), ch.sniServerNames(), None, th))
                       }
                       case None => ZIO.unit
                     })

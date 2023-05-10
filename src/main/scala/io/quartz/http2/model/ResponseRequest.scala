@@ -3,6 +3,7 @@ package io.quartz.http2.model
 import zio.{ZIO, Task, Promise, Chunk}
 import zio.stream.ZStream
 import java.net.URI
+import io.quartz.netio.IOChannel
 
 sealed case class Request(
     connId: Long,
@@ -11,6 +12,7 @@ sealed case class Request(
     stream: ZStream[Any, Throwable, Byte],
     secure: Boolean,
     sniServerNames: Option[Array[String]],
+    channel: Option[IOChannel],
     trailingHeaders: Promise[Throwable, Headers]
 ) {
 
@@ -22,7 +24,7 @@ sealed case class Request(
     *   a new request with the additional headers
     */
   def hdr(hdr: Headers): Request =
-    new Request(connId, streamId, headers ++ hdr, this.stream, secure, sniServerNames, this.trailingHeaders)
+    new Request(connId, streamId, headers ++ hdr, this.stream, secure, sniServerNames, channel, this.trailingHeaders)
 
   /** Adds the specified header pair to the request headers.
     *
@@ -32,7 +34,7 @@ sealed case class Request(
     *   a new request with the additional header pair
     */
   def hdr(pair: (String, String)): Request =
-    new Request(connId, streamId, headers + pair, this.stream, secure, sniServerNames, this.trailingHeaders)
+    new Request(connId, streamId, headers + pair, this.stream, secure, sniServerNames, channel, this.trailingHeaders)
 
     /** Returns the path component of the request URI.
       *
@@ -83,12 +85,20 @@ sealed case class Request(
     */
   def transferEncoding = headers.getMval("transfer-encoding")
 
+  /** Returns true id websocket upgrade requested
+    */
+  def isWebSocket: Boolean =
+    headers
+      .get("upgrade")
+      .map(_.equalsIgnoreCase("websocket"))
+      .collect { case true => true }
+      .getOrElse(false)
+
   /** Returns the request body as a byte array.
     *
     * @return
     *   the request body as a byte array
     */
-
   def body = stream.runCollect.map(chunk => chunk.toArray) // .compile.toVector.map( _.toArray  )
 }
 

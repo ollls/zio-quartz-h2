@@ -71,6 +71,14 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
         ZIO.fail(new BadIncomingData("bad inbound data or invalid request"))
       )
 
+      isWebSocket <- ZIO.succeed(
+        headers
+          .get("upgrade")
+          .map(_.equalsIgnoreCase("websocket"))
+          .collect { case true => true }
+          .getOrElse(false)
+      )
+
       body_stream = (ZStream(leftover) ++ ZStream.repeatZIO(ch.read())).flatMap(ZStream.fromChunk(_))
 
       isChunked <- ZIO.succeed(headers.getMval("transfer-encoding").exists(_.equalsIgnoreCase("chunked")))
@@ -88,6 +96,7 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
       stream <-
         if (isChunked)
           ZIO.attempt(body_stream.via(Chunked11.chunkedDecode).flattenChunks)
+        else if (isWebSocket) ZIO.succeed(body_stream)
         else
           ZIO.attempt(
             body_stream
@@ -97,10 +106,20 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
       emptyTH <- Promise.make[Throwable, Headers] // no trailing headers for 1.1
       _ <- emptyTH.succeed(Headers()) // complete with empty
 
-      http11request <- ZIO.attempt(Request(id, streamId, headers, stream, ch.secure(), ch.sniServerNames(), emptyTH))
-
+      http11request <- ZIO.attempt(
+        Request(
+          id,
+          streamId,
+          headers,
+          stream,
+          ch.secure(),
+          ch.sniServerNames(),
+          if (isWebSocket) Some(ch) else None,
+          emptyTH
+        )
+      )
+      // _ <- ZIO.when(isWebSocket == false)(route2(streamId, http11request, isChunked))
       _ <- route2(streamId, http11request, isChunked)
-
     } yield ()
   }
 
@@ -126,7 +145,8 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
           ZIO.succeed(Some(Response.Error(StatusCode.InternalServerError)))
     }
 
-    _ <- response_o match {
+    _ <- ZIO.when(request.isWebSocket == true)(ZIO.logInfo( s"HTTP/1.1 connId=$id streamId=$streamId Upgraded WebSocket Connection has ended"))
+    _ <- ZIO.when(request.isWebSocket == false)(response_o match {
       case Some(response) =>
         for {
           _ <- ResponseWriters11.writeFullResponseFromStreamChunked(
@@ -141,7 +161,7 @@ class Http11Connection[Env](ch: IOChannel, val id: Long, streamIdRef: Ref[Int], 
         ZIO.logError(
           s"HTTP/1.1 connId=$id streamId=$streamId ${request.method.name} ${request.path} ${StatusCode.NotFound.toString()}"
         ) *> ResponseWriters11.writeNoBodyResponse(ch, StatusCode.NotFound, false)
-    }
+    })
 
   } yield ()
 
