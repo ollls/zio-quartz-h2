@@ -1,7 +1,7 @@
 import Dependencies._
 
 ThisBuild / scalaVersion := "3.3.1"
-ThisBuild / version := "0.5.6"
+ThisBuild / version := "0.5.7"
 ThisBuild / organization := "io.github.ollls"
 ThisBuild / organizationName := "ollls"
 ThisBuild / versionScheme := Some("early-semver")
@@ -47,8 +47,8 @@ lazy val root = (project in file("."))
     organization := "io.github.ollls",
     name := "zio-quartz-h2",
     libraryDependencies += scalaTest % Test,
-    libraryDependencies += "dev.zio" %% "zio" % "2.0.18",
-    libraryDependencies += "dev.zio" %% "zio-streams" % "2.0.18",
+    libraryDependencies += "dev.zio" %% "zio" % "2.0.21",
+    libraryDependencies += "dev.zio" %% "zio-streams" % "2.0.21",
     libraryDependencies += "com.twitter" % "hpack" % "1.0.2",
     libraryDependencies += "dev.zio" %% "zio-logging-slf4j" % "2.1.14",
     libraryDependencies += "org.slf4j" % "slf4j-api" % "2.0.4",

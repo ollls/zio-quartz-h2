@@ -414,7 +414,7 @@ class QuartzH2Server[Env](
         .flatMap(ch => ZIO.attempt(TLSChannel(sslCtx, ch)))
 
       ch0 <- accept
-        .flatMap((c => c.ssl_init_h2().map((c, _)).catchAll(e => c.close().ignore *> ZIO.fail(e))))
+        .flatMap((c => c.ssl_init_h2().map((c, _)).catchAll(e => c.rch.close().ignore *> ZIO.fail(e))))
         .tap(c =>
           ZIO.logInfo(
             s"${c._1.ctx.getProtocol()} ${tlsPrint(c._1)} ${c._1.f_SSL.engine

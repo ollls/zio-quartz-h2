@@ -113,7 +113,7 @@ object TLSChannel {
   }
 }
 
-class TLSChannel(val ctx: SSLContext, rch: TCPChannel) extends IOChannel {
+class TLSChannel(val ctx: SSLContext, val rch: TCPChannel) extends IOChannel {
 
   var f_SSL: SSLEngine = new SSLEngine(ctx.createSSLEngine())
   val TLS_PACKET_SZ = f_SSL.engine.getSession().getPacketBufferSize()
