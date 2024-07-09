@@ -1,6 +1,6 @@
 import Dependencies._
 
-ThisBuild / scalaVersion := "3.3.1"
+ThisBuild / scalaVersion := "3.3.3"
 ThisBuild / version := "0.5.6"
 ThisBuild / organization := "io.github.ollls"
 ThisBuild / organizationName := "ollls"
@@ -47,14 +47,14 @@ lazy val root = (project in file("."))
     organization := "io.github.ollls",
     name := "zio-quartz-h2",
     libraryDependencies += scalaTest % Test,
-    libraryDependencies += "dev.zio" %% "zio" % "2.0.18",
-    libraryDependencies += "dev.zio" %% "zio-streams" % "2.0.18",
+    libraryDependencies += "dev.zio" %% "zio" % "2.1.5",
+    libraryDependencies += "dev.zio" %% "zio-streams" % "2.1.5",
     libraryDependencies += "com.twitter" % "hpack" % "1.0.2",
     libraryDependencies += "dev.zio" %% "zio-logging-slf4j" % "2.1.14",
     libraryDependencies += "org.slf4j" % "slf4j-api" % "2.0.4",
     libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.3.5",
-    libraryDependencies += "dev.zio" %% "zio-test"          % "2.0.18" % Test,
-    libraryDependencies += "dev.zio" %% "zio-test-sbt"      % "2.0.18" % Test
+    libraryDependencies += "dev.zio" %% "zio-test"          % "2.1.5" % Test,
+    libraryDependencies += "dev.zio" %% "zio-test-sbt"      % "2.1.5" % Test
   )
 
 lazy val IO = (project in file("examples/IO"))
