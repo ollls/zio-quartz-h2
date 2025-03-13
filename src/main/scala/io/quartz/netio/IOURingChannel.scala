@@ -142,7 +142,7 @@ class IOURingChannel(val ring: IoUringEntry, val ch1: IoUringSocket, var timeOut
       _ <- ZIO.succeed(this.timeOutMs(timeOutMs0))
       bb <- ZIO.succeed(ByteBuffer.allocateDirect(TCPChannel.HTTP_READ_PACKET))
       b1 <- effectAsyncChannelIO[ByteBuffer](ring, ch1)((ring, ch1) => ioUringReadIO(ring, ch1, bb, _))
-      // _ <- IO.raiseError(new java.nio.channels.ClosedChannelException).whenA(b1.position == 0)
+      _ <- ZIO.fail(new java.nio.channels.ClosedChannelException).when(b1.position == 0)
     } yield (Chunk.fromByteBuffer(b1.flip))
   }
 
