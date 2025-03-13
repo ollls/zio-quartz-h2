@@ -113,7 +113,10 @@ object TLSChannel {
   }
 }
 
-class TLSChannel(val ctx: SSLContext, val rch: TCPChannel) extends IOChannel {
+class TLSChannel(val ctx: SSLContext, val rch: IOChannel) extends IOChannel {
+
+  /* not implemented, no need*/
+  def put(bb: ByteBuffer): Task[Unit] = ???
 
   var f_SSL: SSLEngine = new SSLEngine(ctx.createSSLEngine())
   val TLS_PACKET_SZ = f_SSL.engine.getSession().getPacketBufferSize()
@@ -503,7 +506,7 @@ class TLSChannel(val ctx: SSLContext, val rch: TCPChannel) extends IOChannel {
     write(ByteBuffer.wrap(chunk.toArray))
   }
 
-  private def readBuffer(out: ByteBuffer, timeoutMs: Int): Task[Int] = {
+  def readBuffer(out: ByteBuffer, timeoutMs: Int): Task[Int] = {
     val result = for {
       nb <- rch.readBuffer(IN_J_BUFFER, timeoutMs)
       _ <-
@@ -542,7 +545,7 @@ class TLSChannel(val ctx: SSLContext, val rch: TCPChannel) extends IOChannel {
     } yield (chunk)
   }
 
-  def remoteAddress(): Task[SocketAddress] = ZIO.attempt(rch.ch.getRemoteAddress())
+  //def remoteAddress(): Task[SocketAddress] = ZIO.attempt(rch.ch.getRemoteAddress())
 
   def secure() = true
 }

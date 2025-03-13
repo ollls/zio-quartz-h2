@@ -153,7 +153,7 @@ object IoUringTbl {
   }
 
   def getCqesProcessor(entry: IoUringEntry): Task[Unit] = {
-    val processCqes = ZIO.attemptBlocking(entry.ring.getCqes(9000)).catchAll { case _: Throwable =>
+    val processCqes = ZIO.attemptBlocking(entry.ring.getCqes(server.timeout)).catchAll { case _: Throwable =>
       ZIO.logError("IoUring: ring shutdown") *> ZIO.succeed(IoUringTbl.shutdown = true) *> server.shutdown
     }
     // Continue until shutdown becomes true
@@ -179,6 +179,7 @@ object IoUringTbl {
 
   def submitProcessor(entry: IoUringEntry): Task[Unit] = {
     val processSubmit = for {
+      fiber <- ZIO.descriptor
       queueOpIO <- entry.q.take
       _ <- queueOpIO *> ZIO.succeed(entry.ring.submit())
     } yield ()
@@ -186,8 +187,13 @@ object IoUringTbl {
     processSubmit
       .catchAll { case e: Throwable =>
         ZIO.logError(s"${e.toString()} - IoUring: submission queue shutdown") *>
-          // IO(e.printStackTrace()) >>
           ZIO.succeed(IoUringTbl.shutdown = true) *> server.shutdown
+      }
+      .catchAllDefect { deffect =>
+        ZIO.logError(s"Server halted, cannot exit from callback, critical error") *>
+          ZIO.succeed(deffect.printStackTrace()) *>
+          ZIO.succeed(IoUringTbl.shutdown = true) *> server.shutdown
+
       }
       .repeatUntil(_ => IoUringTbl.shutdown)
   }

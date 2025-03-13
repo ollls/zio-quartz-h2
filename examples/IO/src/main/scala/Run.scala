@@ -155,7 +155,7 @@ object MyApp extends ZIOAppDefault {
         ctx, /*2097152,*/
         onConnect = onConnect,
         onDisconnect = onDisconnect
-      ).startIO(R, filter, sync = false)
+      ).startIO_linuxOnly(R, filter) //, sync = false)
 
     } yield (exitCode)).provideSomeLayer(env)
   }

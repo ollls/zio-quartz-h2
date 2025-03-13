@@ -41,6 +41,7 @@ import io.quartz.util.Utils
 
 import java.net._
 import java.io._
+import io.quartz.iouring.{IoUringServerSocket, IoUring}
 import javax.net.ssl.SSLServerSocket
 import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.SSLSocket
@@ -122,6 +123,8 @@ class QuartzH2Server[Env](
   val HTTP1_KEEP_ALIVE_MS = 20000
 
   var shutdownFlag = false
+
+  def timeout = h2IdleTimeOutMs
 
   def shutdown = (for {
     _ <- ZIO.succeed { shutdownFlag = true }
@@ -339,6 +342,27 @@ class QuartzH2Server[Env](
     start(Routes.of[Env](pf, filter), sync)
   }
 
+  def startIO_linuxOnly(
+      pf: HttpRouteIO[Env],
+      filter: WebFilter[Env] = (r0: Request) => ZIO.succeed(Right(r0))
+  ): ZIO[Env, Throwable, ExitCode] = {
+    start_withIOURing(Routes.of[Env](pf, filter), false)
+  }
+
+  def start_withIOURing(R: HttpRoute[Env], sync: Boolean): ZIO[Env, Throwable, ExitCode] = {
+    val cores = Runtime.getRuntime().availableProcessors()
+    val h2streams = cores * 2 // optimal setting tested with h2load
+
+    if (sslCtx != null) {
+
+      run4(R, cores, h2streams, h2IdleTimeOutMs)
+
+    } else {
+      ???
+    }
+
+  }
+
   def start(R: HttpRoute[Env], sync: Boolean): ZIO[Env, Throwable, ExitCode] = {
 
     val cores = Runtime.getRuntime().availableProcessors()
@@ -542,6 +566,68 @@ class QuartzH2Server[Env](
         .repeatUntil(_ => shutdownFlag)
 
       _ <- ZIO.attempt(server_ch.close())
+      _ <- ZIO.when(shutdownFlag)(ZIO.logInfo("Shutdown request, server stoped gracefully"))
+
+    } yield (ExitCode.success)
+  }
+
+  def run4(
+      R: HttpRoute[Env],
+      maxThreadNum: Int,
+      maxStreams: Int,
+      keepAliveMs: Int
+  ): ZIO[Env, Throwable, ExitCode] = {
+    for {
+      addr <- ZIO.attempt(new InetSocketAddress(HOST, PORT))
+      _ <- ZIO.logInfo("HTTP/2 TLS Service: QuartzH2 (async - linux io-uring)")
+      _ <- ZIO.logInfo(s"Concurrency level(max threads): $maxThreadNum, max streams per conection: $maxStreams")
+      _ <- ZIO.logInfo(s"H2 Idle Timeout: $keepAliveMs Ms")
+      _ <- ZIO.logInfo(
+        s"Listens: ${addr.getHostString()}:${addr.getPort().toString()}"
+      )
+
+      conId <- Ref.make(0L)
+
+      rings <- IoUringTbl(this, 1)
+      serverSocket <- ZIO.succeed(new IoUringServerSocket(PORT))
+      acceptURing <- ZIO.succeed(new IoUring(512))
+
+      loop = for {
+
+        _ <- ZIO.logDebug("Wait on accept")
+        a <- IOURingChannel.accept(acceptURing, serverSocket)
+        (ring_srv, socket) = a
+        _ <- ZIO.logInfo(s"Connect from remote peer: ${socket.ipAddress()}")
+
+        ring <- rings.get
+        ch <- ZIO.succeed(IOURingChannel(ring, socket, keepAliveMs))
+        c <- ZIO
+          .succeed(TLSChannel(sslCtx, ch))
+          .flatMap(c => c.ssl_init_h2().map((c, _)))
+          .catchAll(e => ch.close().ignore *> ZIO.succeed(rings.release(ring)) *> ZIO.fail(e))
+
+        _ <- ZIO.logInfo(
+          s"${c._1.ctx.getProtocol()} ${tlsPrint(c._1)} ${c._1.f_SSL.engine
+              .getApplicationProtocol()} tls-sni: ${printSniName(c._1.sniServerNames())}"
+        )
+
+        _ <- conId.update(_ + 1)
+
+        _ <- ZIO.scoped {
+          ZIO
+            .acquireRelease(ZIO.succeed(c))(t => t._1.close().ignore *> ZIO.succeed(rings.release(ring)))
+            .flatMap(t =>
+              doConnect(t._1, conId, maxStreams, keepAliveMs, R, t._2).catchAll(e => errorHandler(e).ignore)
+            )
+        }.fork
+      } yield ()
+
+      _ <- loop.catchAll(e => errorHandler(e).ignore).repeatUntil((_ => shutdownFlag))
+
+      _ <- rings.closeIoURings
+      _ <- ZIO.succeed(serverSocket.close())
+      _ <- ZIO.succeed(acceptURing.close())
+
       _ <- ZIO.when(shutdownFlag)(ZIO.logInfo("Shutdown request, server stoped gracefully"))
 
     } yield (ExitCode.success)
