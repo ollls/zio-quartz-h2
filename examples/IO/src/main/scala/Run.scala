@@ -118,7 +118,7 @@ object MyApp extends ZIOAppDefault {
       ZIO.attempt(Response.Ok().asStream(ts))
 
     case GET -> Root / StringVar(file) =>
-      val FOLDER_PATH = "/Users/ostrygun/web_root/"
+      val FOLDER_PATH = "/home/ols/web_root/"
       val FILE = s"$file"
       val BLOCK_SIZE = 1024 * 14
       for {

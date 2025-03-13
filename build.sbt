@@ -47,6 +47,7 @@ lazy val root = (project in file("."))
     organization := "io.github.ollls",
     name := "zio-quartz-h2",
     libraryDependencies += scalaTest % Test,
+    libraryDependencies += "io.github.ollls" %% "iouring-quartz-h2" % "0.9-RC",
     libraryDependencies += "dev.zio" %% "zio" % "2.0.21",
     libraryDependencies += "dev.zio" %% "zio-streams" % "2.0.21",
     libraryDependencies += "com.twitter" % "hpack" % "1.0.2",
