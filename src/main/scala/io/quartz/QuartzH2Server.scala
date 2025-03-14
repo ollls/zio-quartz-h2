@@ -345,13 +345,14 @@ class QuartzH2Server[Env](
   }
 
   def startIO_linuxOnly(
+      rings : Int, 
       pf: HttpRouteIO[Env],
       filter: WebFilter[Env] = (r0: Request) => ZIO.succeed(Right(r0))
   ): ZIO[Env, Throwable, ExitCode] = {
-    start_withIOURing(Routes.of[Env](pf, filter), false)
+    start_withIOURing(rings, Routes.of[Env](pf, filter), false)
   }
 
-  def start_withIOURing(R: HttpRoute[Env], sync: Boolean): ZIO[Env, Throwable, ExitCode] = {
+  def start_withIOURing(rings : Int, R: HttpRoute[Env], sync: Boolean): ZIO[Env, Throwable, ExitCode] = {
     val cores = Runtime.getRuntime().availableProcessors()
     val h2streams = cores * 2 // optimal setting tested with h2load
     // val e = new java.util.concurrent.ForkJoinPool(6)
@@ -362,7 +363,7 @@ class QuartzH2Server[Env](
     if (sslCtx != null) {
 
       // ZIO.onExecutor( ee )( run4( R, cores, h2streams, h2IdleTimeOutMs ) )
-      run4(R, cores, h2streams, h2IdleTimeOutMs) // .onExecutor( ee )
+      run4(rings, R, cores, h2streams, h2IdleTimeOutMs) // .onExecutor( ee )
 
     } else {
       ???
@@ -590,6 +591,7 @@ class QuartzH2Server[Env](
   )
 
   def run4(
+      rings : Int,
       R: HttpRoute[Env],
       maxThreadNum: Int,
       maxStreams: Int,
@@ -598,7 +600,7 @@ class QuartzH2Server[Env](
     for {
 
       addr <- ZIO.attempt(new InetSocketAddress(HOST, PORT))
-      _ <- ZIO.logInfo("HTTP/2 TLS Service: QuartzH2 (async - linux io-uring)")
+      _ <- ZIO.logInfo( s"HTTP/2 TLS Service: QuartzH2 (async - linux io-uring with $rings ring instance(s))")
       _ <- ZIO.logInfo(s"Concurrency level(max threads): $maxThreadNum, max streams per conection: $maxStreams")
       _ <- ZIO.logInfo(s"H2 Idle Timeout: $keepAliveMs Ms")
       _ <- ZIO.logInfo(
@@ -610,7 +612,7 @@ class QuartzH2Server[Env](
       // with default ZIO main thread pool, one ring is the best which means one daemon service thread on a single iouring descriptor.
       // would be nice to limit parallelism on ZIO.default.executor to get more rings - but this is only possible
       // with custom ThreadPool, and not sure why, but defaut executior is better anyway.
-      rings <- IoUringTbl(this, 1)
+      rings <- IoUringTbl(this, rings)
       _ <- ctrlC_handlerZIO_withConnect(rings)
 
       serverSocket <- ZIO.succeed(new IoUringServerSocket(PORT))

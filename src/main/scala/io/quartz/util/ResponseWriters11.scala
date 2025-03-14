@@ -24,6 +24,14 @@ object ResponseWriters11 {
     writeFullResponse(ch, response, "", close)
   }
 
+  def wrapDirect( array : Array[Byte]) = {
+    var directBuffer = ByteBuffer.allocateDirect(array.length);
+    directBuffer.put(array);
+    directBuffer.flip();
+    directBuffer;
+}
+
+
   ////////////////////////////////////////////////////////////////////////////
   def writeFullResponse(
       c: IOChannel,
@@ -31,16 +39,16 @@ object ResponseWriters11 {
       msg: String,
       close: Boolean
   ): Task[Int] =
-    c.write(ByteBuffer.wrap(genResponseFromResponse(rs, msg, close).getBytes()))
+    c.write(wrapDirect(genResponseFromResponse(rs, msg, close).getBytes()))
 
   def writeResponseMethodNotAllowed(c: IOChannel, allow: String): Task[Int] =
-    c.write(ByteBuffer.wrap(genResponseMethodNotAllowed(allow).getBytes()))
+    c.write(wrapDirect(genResponseMethodNotAllowed(allow).getBytes()))
 
   def writeResponseUnsupportedMediaType(c: IOChannel): Task[Int] =
-    c.write(ByteBuffer.wrap(genResponseUnsupportedMediaType().getBytes()))
+    c.write(wrapDirect(genResponseUnsupportedMediaType().getBytes()))
 
   def writeResponseRedirect(c: IOChannel, location: String): Task[Int] =
-    c.write(ByteBuffer.wrap(genResponseRedirect(location).getBytes()))
+    c.write(wrapDirect(genResponseRedirect(location).getBytes()))
 
   ///////////////////////////////////////////////////////////
   // chunkSize = tls app packet max len
@@ -62,11 +70,11 @@ object ResponseWriters11 {
 
       y <- ZIO.scoped {
         fpm.flatMap { fp =>
-          c.write(ByteBuffer.wrap(header.getBytes)) *> (attemptBlocking(fp.read(buf))
+          c.write(wrapDirect(header.getBytes)) *> (attemptBlocking(fp.read(buf))
             .flatMap { nBytes =>
               {
                 if (nBytes > 0) {
-                  c.write(ByteBuffer.wrap(Chunk.fromArray(buf).take(nBytes).toArray)) *> ZIO.succeed(nBytes)
+                  c.write(wrapDirect(Chunk.fromArray(buf).take(nBytes).toArray)) *> ZIO.succeed(nBytes)
                 } else ZIO.succeed(nBytes)
               }
             })
@@ -95,7 +103,7 @@ object ResponseWriters11 {
 
     res.foreach { chunk0 =>
       {
-        c.write(ByteBuffer.wrap(chunk0.toArray))
+        c.write(wrapDirect(chunk0.toArray))
       }
     }
   }
