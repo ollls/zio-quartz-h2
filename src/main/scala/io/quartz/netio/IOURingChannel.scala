@@ -131,10 +131,8 @@ class IOURingChannel(val ring: IoUringEntry, val ch1: IoUringSocket, var timeOut
         if (f_putBack != null) {
           ZIO.succeed(dst.put(f_putBack)) *> ZIO.succeed { f_putBack = null }
         } else ZIO.unit
-      _ <- ZIO.debug("Enter effect")
       b1 <- effectAsyncChannelIO[ByteBuffer](ring, ch1)((ring, ch1) => ioUringReadIO(ring, ch1, dst, _))
         //.race(ZIO.sleep(Duration(timeOut, TimeUnit.MILLISECONDS)).map(_ => ByteBuffer.allocate(0)))
-      _ <- ZIO.debug("Exit effect")
       n <- ZIO.succeed(b1.position())
       _ <- ZIO.fail(new java.nio.channels.ClosedChannelException).when(n <= 0)
 
