@@ -48,14 +48,14 @@ lazy val root = (project in file("."))
     name := "zio-quartz-h2",
     libraryDependencies += scalaTest % Test,
     libraryDependencies += "io.github.ollls" %% "iouring-quartz-h2" % "0.9-RC",
-    libraryDependencies += "dev.zio" %% "zio" % "2.0.21",
-    libraryDependencies += "dev.zio" %% "zio-streams" % "2.0.21",
+    libraryDependencies += "dev.zio" %% "zio" % "2.1.16",
+    libraryDependencies += "dev.zio" %% "zio-streams" % "2.1.16",
     libraryDependencies += "com.twitter" % "hpack" % "1.0.2",
     libraryDependencies += "dev.zio" %% "zio-logging-slf4j" % "2.1.14",
     libraryDependencies += "org.slf4j" % "slf4j-api" % "2.0.4",
     libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.3.5",
-    libraryDependencies += "dev.zio" %% "zio-test"          % "2.0.18" % Test,
-    libraryDependencies += "dev.zio" %% "zio-test-sbt"      % "2.0.18" % Test
+    libraryDependencies += "dev.zio" %% "zio-test"          % "2.1.16" % Test,
+    libraryDependencies += "dev.zio" %% "zio-test-sbt"      % "2.1.16" % Test
   )
 
 lazy val IO = (project in file("examples/IO"))

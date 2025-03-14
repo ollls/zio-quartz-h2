@@ -820,7 +820,10 @@ class Http2Connection[Env](
     case e @ _ => {
       ZIO.logError(e.toString())
     }
-  }
+  }.catchAllDefect { throwable =>
+  ZIO.logError(s"Unexpected error: ${throwable.getMessage}")
+  //ZIO.fail(SystemFailure(throwable))
+}
 
   ////////////////////////////////////////////////////
   def packet_handler(

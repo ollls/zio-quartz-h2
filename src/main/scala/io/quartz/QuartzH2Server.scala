@@ -127,6 +127,7 @@ class QuartzH2Server[Env](
   def timeout = h2IdleTimeOutMs
 
   def shutdown = (for {
+    _ <- ZIO.debug("Shutting down...")
     _ <- ZIO.succeed { shutdownFlag = true }
     c <- TCPChannel.connect(HOST, PORT)
     _ <- c.close()
@@ -312,8 +313,9 @@ class QuartzH2Server[Env](
           )
         case e: java.nio.channels.InterruptedByTimeoutException =>
           ZIO.logInfo("Remote peer disconnected on timeout")
+        case e: java.nio.channels.ClosedChannelException =>
+          ZIO.logInfo("Remote peer disconnected")
         case _ => ZIO.logError("errorHandler: " + e.toString)
-        /*>> IO(e.printStackTrace)*/
       }
     } else ZIO.unit
   }
@@ -352,10 +354,15 @@ class QuartzH2Server[Env](
   def start_withIOURing(R: HttpRoute[Env], sync: Boolean): ZIO[Env, Throwable, ExitCode] = {
     val cores = Runtime.getRuntime().availableProcessors()
     val h2streams = cores * 2 // optimal setting tested with h2load
+    // val e = new java.util.concurrent.ForkJoinPool(6)
+    // val ee = zio.Executor.fromJavaExecutor( e )
+    // val e = java.util.concurrent.Executors.newFixedThreadPool(6)
+    // val ee = zio.Executor.fromJavaExecutor( e )
 
     if (sslCtx != null) {
 
-      run4(R, cores, h2streams, h2IdleTimeOutMs)
+      // ZIO.onExecutor( ee )( run4( R, cores, h2streams, h2IdleTimeOutMs ) )
+      run4(R, cores, h2streams, h2IdleTimeOutMs) // .onExecutor( ee )
 
     } else {
       ???
@@ -571,6 +578,17 @@ class QuartzH2Server[Env](
     } yield (ExitCode.success)
   }
 
+  def ctrlC_handlerZIO_withConnect(rings: IoUringTbl) = ZIO.attempt(
+    java.lang.Runtime
+      .getRuntime()
+      .addShutdownHook(new Thread {
+        override def run = {
+          Runtime.getRuntime.halt(0)
+          ()
+        }
+      })
+  )
+
   def run4(
       R: HttpRoute[Env],
       maxThreadNum: Int,
@@ -578,6 +596,7 @@ class QuartzH2Server[Env](
       keepAliveMs: Int
   ): ZIO[Env, Throwable, ExitCode] = {
     for {
+
       addr <- ZIO.attempt(new InetSocketAddress(HOST, PORT))
       _ <- ZIO.logInfo("HTTP/2 TLS Service: QuartzH2 (async - linux io-uring)")
       _ <- ZIO.logInfo(s"Concurrency level(max threads): $maxThreadNum, max streams per conection: $maxStreams")
@@ -588,18 +607,22 @@ class QuartzH2Server[Env](
 
       conId <- Ref.make(0L)
 
+      // with default ZIO main thread pool, one ring is the best which means one daemon service thread on a single iouring descriptor.
+      // would be nice to limit parallelism on ZIO.default.executor to get more rings - but this is only possible
+      // with custom ThreadPool, and not sure why, but defaut executior is better anyway.
       rings <- IoUringTbl(this, 1)
+      _ <- ctrlC_handlerZIO_withConnect(rings)
+
       serverSocket <- ZIO.succeed(new IoUringServerSocket(PORT))
       acceptURing <- ZIO.succeed(new IoUring(512))
-
       loop = for {
-
         _ <- ZIO.logDebug("Wait on accept")
         a <- IOURingChannel.accept(acceptURing, serverSocket)
         (ring_srv, socket) = a
         _ <- ZIO.logInfo(s"Connect from remote peer: ${socket.ipAddress()}")
 
         ring <- rings.get
+
         ch <- ZIO.succeed(IOURingChannel(ring, socket, keepAliveMs))
         c <- ZIO
           .succeed(TLSChannel(sslCtx, ch))
@@ -622,8 +645,10 @@ class QuartzH2Server[Env](
         }.fork
       } yield ()
 
-      _ <- loop.catchAll(e => errorHandler(e).ignore).repeatUntil((_ => shutdownFlag))
-
+      _ <- loop
+        .catchAll(e => errorHandler(e).ignore)
+        .catchAllDefect(error => ZIO.logError(error.toString()))
+        .repeatUntil((_ => shutdownFlag))
       _ <- rings.closeIoURings
       _ <- ZIO.succeed(serverSocket.close())
       _ <- ZIO.succeed(acceptURing.close())

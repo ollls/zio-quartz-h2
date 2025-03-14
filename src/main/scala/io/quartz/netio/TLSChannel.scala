@@ -128,7 +128,7 @@ class TLSChannel(val ctx: SSLContext, val rch: IOChannel) extends IOChannel {
   private[this] val sni_hosts = new ListBuffer[String]()
 
   // prealoc carryover buffer, position getting saved between calls
-  private[this] val IN_J_BUFFER = java.nio.ByteBuffer.allocate(TLS_PACKET_SZ * MULTIPLER)
+  private[this] val IN_J_BUFFER = java.nio.ByteBuffer.allocateDirect(TLS_PACKET_SZ * MULTIPLER)
 
   override def sniServerNames(): Option[Array[String]] = {
     if( sni_hosts.size == 0 ) None
@@ -143,8 +143,8 @@ class TLSChannel(val ctx: SSLContext, val rch: IOChannel) extends IOChannel {
     val result = for {
       sequential_unwrap_flag <- Ref.make(false)
 
-      in_buf <- ZIO.attempt(ByteBuffer.allocate(TLS_PACKET_SZ))
-      out_buf <- ZIO.attempt(ByteBuffer.allocate(TLS_PACKET_SZ))
+      in_buf <- ZIO.attempt(ByteBuffer.allocateDirect(TLS_PACKET_SZ))
+      out_buf <- ZIO.attempt(ByteBuffer.allocateDirect(TLS_PACKET_SZ))
       empty <- ZIO.attempt(ByteBuffer.allocate(0))
 
       _ <- f_SSL.wrap(empty, out_buf) *> ZIO.attempt(out_buf.flip) *> rch.write(out_buf)
@@ -264,8 +264,8 @@ class TLSChannel(val ctx: SSLContext, val rch: IOChannel) extends IOChannel {
     val result = for {
       sequential_unwrap_flag <- Ref.make(false)
 
-      in_buf <- ZIO.attempt(ByteBuffer.allocate(TLS_PACKET_SZ))
-      out_buf <- ZIO.attempt(ByteBuffer.allocate(TLS_PACKET_SZ))
+      in_buf <- ZIO.attempt(ByteBuffer.allocateDirect(TLS_PACKET_SZ))
+      out_buf <- ZIO.attempt(ByteBuffer.allocateDirect(TLS_PACKET_SZ))
       empty <- ZIO.attempt(ByteBuffer.allocate(0))
 
       nbw <- rch
@@ -364,7 +364,7 @@ class TLSChannel(val ctx: SSLContext, val rch: IOChannel) extends IOChannel {
       _ <- ZIO.attempt(f_SSL.engine.getSession().invalidate())
       _ <- f_SSL.closeOutbound()
       empty <- ZIO.attempt(ByteBuffer.allocate(0))
-      out <- ZIO.attempt(ByteBuffer.allocate(TLS_PACKET_SZ))
+      out <- ZIO.attempt(ByteBuffer.allocateDirect(TLS_PACKET_SZ))
       loop = f_SSL.wrap(empty, out) *> f_SSL.isOutboundDone()
       _ <- loop.repeatUntil((status: Boolean) => status)
       _ <- ZIO.attempt(out.flip)
@@ -482,7 +482,7 @@ class TLSChannel(val ctx: SSLContext, val rch: IOChannel) extends IOChannel {
   def write(in: ByteBuffer): Task[Int] = {
 
     val res = for {
-      out <- ZIO.attempt(ByteBuffer.allocate(if (in.limit() > TLS_PACKET_SZ) in.limit() * 3 else TLS_PACKET_SZ * 3))
+      out <- ZIO.attempt(ByteBuffer.allocateDirect(if (in.limit() > TLS_PACKET_SZ) in.limit() * 3 else TLS_PACKET_SZ * 3))
       // _ <- IO(out.clear)
 
       loop = for {
@@ -539,7 +539,7 @@ class TLSChannel(val ctx: SSLContext, val rch: IOChannel) extends IOChannel {
 
   def read(timeoutMs: Int): Task[Chunk[Byte]] = {
     for {
-      bb <- ZIO.attempt(ByteBuffer.allocate(MULTIPLER * APP_PACKET_SZ))
+      bb <- ZIO.attempt(ByteBuffer.allocateDirect(MULTIPLER * APP_PACKET_SZ))
       n <- readBuffer(bb, timeoutMs)
       chunk <- ZIO.attempt(Chunk.fromByteBuffer(bb))
     } yield (chunk)

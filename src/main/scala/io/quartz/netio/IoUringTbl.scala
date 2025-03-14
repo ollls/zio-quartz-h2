@@ -29,6 +29,11 @@ case class IoUringEntry(
     ring: IoUring
 ) {
 
+  def close = for {
+    //_ <- ZIO.succeed(ring.close())
+    _ <- q.shutdown
+  } yield ()
+
   /** Synchronized wrapper for IoUring's queueRead method.
     *
     * @param entry
@@ -135,7 +140,8 @@ class IoUringTbl(entries: List[IoUringEntry]) {
   def size: Int = entries.size
 
   def closeIoURings = {
-    ZIO.succeed(entries.foreach(_.ring.close()))
+    ZIO.succeed( IoUringTbl.shutdown = true) *> 
+    ZIO.foreach( entries )( _.close)
   }
 }
 
@@ -158,7 +164,7 @@ object IoUringTbl {
     }
     // Continue until shutdown becomes true
     processCqes
-      .repeatUntil(_ => IoUringTbl.shutdown)
+      .repeatUntil(_ => IoUringTbl.shutdown || server.shutdownFlag)
       .unit
   }
 
@@ -195,7 +201,7 @@ object IoUringTbl {
           ZIO.succeed(IoUringTbl.shutdown = true) *> server.shutdown
 
       }
-      .repeatUntil(_ => IoUringTbl.shutdown)
+      .repeatUntil(_ => IoUringTbl.shutdown || server.shutdownFlag)
   }
 
   /** Create a new IoUringTbl with the specified number of IoUring instances.
@@ -222,7 +228,8 @@ object IoUringTbl {
           // Start a processor for each IoUringEntry
           ZIO
             .foreach(entries) { entry =>
-              submitProcessor(entry).fork *> getCqesProcessor(entry).fork
+              submitProcessor(entry).fork *> ZIO.blocking{getCqesProcessor(entry)}.fork
+              //ZIO.blocking(submitProcessor(entry)).fork *> ZIO.blocking{getCqesProcessor(entry)}.fork
             }
             .as(tbl)
         }
