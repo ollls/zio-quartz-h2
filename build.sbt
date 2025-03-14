@@ -64,6 +64,13 @@ lazy val IO = (project in file("examples/IO"))
     name := "example"
   )
 
+
+lazy val IOU = (project in file("examples/IOU"))
+  .dependsOn(root)
+  .settings(
+    name := "iouring example"
+  )  
+
 scalacOptions ++= Seq(
   // "-Wunused:imports",
   // "-Xfatal-warnings",
