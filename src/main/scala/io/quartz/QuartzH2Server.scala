@@ -354,11 +354,11 @@ class QuartzH2Server[Env](
 
   def start_withIOURing(rings: Int, R: HttpRoute[Env], sync: Boolean): ZIO[Env, Throwable, ExitCode] = {
     val cores = Runtime.getRuntime().availableProcessors()
-    val h2streams = cores * 4 //max, not always good
+    val h2streams = cores * 4 // max, not always good
     if (sslCtx != null) {
       run4(rings, R, cores, h2streams, h2IdleTimeOutMs)
     } else {
-      ???
+      run5(rings, R, cores, h2streams, h2IdleTimeOutMs)
     }
 
   }
@@ -366,7 +366,7 @@ class QuartzH2Server[Env](
   def start(R: HttpRoute[Env], sync: Boolean): ZIO[Env, Throwable, ExitCode] = {
 
     val cores = Runtime.getRuntime().availableProcessors()
-    val h2streams = cores * 4 //max, not always good
+    val h2streams = cores * 4 // max, not always good
 
     if (sync == false) {
 
@@ -614,6 +614,62 @@ class QuartzH2Server[Env](
             .flatMap(t =>
               doConnect(t._1, conId, maxStreams, keepAliveMs, R, t._2).catchAll(e => errorHandler(e).ignore)
             )
+        }.fork
+      } yield ()
+
+      _ <- loop
+        .catchAll(e => errorHandler(e).ignore)
+        .catchAllDefect(error => ZIO.logError(error.toString()))
+        .repeatUntil((_ => shutdownFlag))
+      _ <- rings.closeIoURings
+      _ <- ZIO.succeed(serverSocket.close())
+      _ <- ZIO.succeed(acceptURing.close())
+
+      _ <- ZIO.when(shutdownFlag)(ZIO.logInfo("Shutdown request, server stoped gracefully"))
+
+    } yield (ExitCode.success)
+  }
+
+  def run5(
+      rings: Int,
+      R: HttpRoute[Env],
+      maxThreadNum: Int,
+      maxStreams: Int,
+      keepAliveMs: Int
+  ): ZIO[Env, Throwable, ExitCode] = {
+    for {
+
+      addr <- ZIO.attempt(new InetSocketAddress(HOST, PORT))
+      _ <- ZIO.logInfo(s"HTTP/2 h2c Service: QuartzH2 (async - linux io-uring with $rings ring instance(s))")
+      _ <- ZIO.logInfo(s"Concurrency level(max threads): $maxThreadNum, max streams per conection: $maxStreams")
+      _ <- ZIO.logInfo(s"H2 Idle Timeout: $keepAliveMs Ms")
+      _ <- ZIO.logInfo(
+        s"Listens: ${addr.getHostString()}:${addr.getPort().toString()}"
+      )
+
+      conId <- Ref.make(0L)
+
+      rings <- IoUringTbl(this, rings)
+      _ <- ctrlC_handlerZIO_withConnect(rings)
+
+      serverSocket <- ZIO.succeed(new IoUringServerSocket(PORT))
+      acceptURing <- ZIO.succeed(new IoUring(512))
+      loop = for {
+        _ <- ZIO.logDebug("Wait on accept")
+        a <- IOURingChannel.accept(acceptURing, serverSocket)
+        (ring_srv, socket) = a
+        _ <- ZIO.logInfo(s"Connect from remote peer: ${socket.ipAddress()}")
+
+        ring <- rings.get
+
+        ch <- ZIO.succeed(IOURingChannel(ring, socket, keepAliveMs))
+
+        _ <- conId.update(_ + 1)
+
+        _ <- ZIO.scoped {
+          ZIO
+            .acquireRelease(ZIO.succeed(ch))(_.close().ignore *> ZIO.succeed(rings.release(ring)))
+            .flatMap(t => doConnect(ch, conId, maxStreams, keepAliveMs, R).catchAll(e => errorHandler(e).ignore))
         }.fork
       } yield ()
 
