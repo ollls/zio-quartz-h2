@@ -19,6 +19,7 @@ import io.quartz.http2.model.StatusCode
 
 object HelloWorldSpec extends ZIOSpecDefault {
 
+  val linux = false
   val PORT = 11443
   val FOLDER_PATH = "/home/ols/web_root/"
   val BIG_FILE = "IMG_0278.jpeg"
@@ -60,7 +61,11 @@ object HelloWorldSpec extends ZIOSpecDefault {
         for {
           ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
           server <- ZIO.attempt(new QuartzH2Server("localhost", PORT.toInt, 15 * 1000, ctx))
-          fib <- (server.startIO_linuxOnly(1, R)).fork
+
+          fib <-
+            if (linux)(server.startIO_linuxOnly(1, R)).fork
+            else (server.startIO(R, sync = false)).fork
+
           _ <- live(Clock.sleep(2000.milli))
           c <- QuartzH2Client.open(s"https://localhost:$PORT", 10 * 1000, ctx)
           program = c.doGet("/" + BIG_FILE).flatMap(_.stream.runCount)
@@ -76,7 +81,11 @@ object HelloWorldSpec extends ZIOSpecDefault {
         for {
           ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
           server <- ZIO.attempt(new QuartzH2Server("localhost", PORT.toInt, 16000, ctx))
-          fib <- (server.startIO_linuxOnly(1, R)).fork
+
+          fib <-
+            if (linux)(server.startIO_linuxOnly(1, R)).fork
+            else (server.startIO(R, sync = false)).fork
+
           _ <- live(Clock.sleep(2000.milli))
           c <- QuartzH2Client.open(s"https://localhost:$PORT", 1000, ctx)
           file <- ZIO.attempt(new java.io.File(FOLDER_PATH + BIG_FILE))
@@ -92,7 +101,11 @@ object HelloWorldSpec extends ZIOSpecDefault {
         for {
           ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
           server <- ZIO.attempt(new QuartzH2Server("localhost", PORT.toInt, 15 * 1000, ctx))
-          fib <- (server.startIO_linuxOnly(1, R)).fork
+
+          fib <-
+            if (linux)(server.startIO_linuxOnly(1, R)).fork
+            else (server.startIO(R, sync = false)).fork
+
           _ <- live(Clock.sleep(2000.milli))
           path <- ZIO.attempt(new java.io.File(FOLDER_PATH + BIG_FILE))
           present <- ZIO.attempt(path.exists())
@@ -117,26 +130,31 @@ object HelloWorldSpec extends ZIOSpecDefault {
       },
       test("Web Filter") {
         val filter: WebFilter[String] =
-          (r: Request) => for {
-            auth_string <- ZIO.environmentWith[String](str => str.get)
-            result <- ZIO.attempt {
-              Either.cond(
-                r.headers
-                  .get("authorization")
-                  .find(_ == auth_string)
-                  .isDefined,
-                r.hdr("test_tid" -> "ABC123Z9292827"),
-                Response.Error(StatusCode.Forbidden).asText("Denied: " + r.uri.getPath())
-              )
-            }
-            
-          } yield(result)
+          (r: Request) =>
+            for {
+              auth_string <- ZIO.environmentWith[String](str => str.get)
+              result <- ZIO.attempt {
+                Either.cond(
+                  r.headers
+                    .get("authorization")
+                    .find(_ == auth_string)
+                    .isDefined,
+                  r.hdr("test_tid" -> "ABC123Z9292827"),
+                  Response.Error(StatusCode.Forbidden).asText("Denied: " + r.uri.getPath())
+                )
+              }
+
+            } yield (result)
 
         for {
           auth_string <- ZIO.environmentWith[String](str => str.get)
           ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
           server <- ZIO.attempt(new QuartzH2Server[String]("localhost", PORT.toInt, 15 * 1000, ctx))
-          fib <- (server.startIO_linuxOnly(1, R, filter)).fork
+
+          fib <-
+            if (linux)(server.startIO_linuxOnly(1, R, filter)).fork
+            else (server.startIO(R, filter, sync = false)).fork
+
           _ <- live(Clock.sleep(2000.milli))
           c <- QuartzH2Client.open(s"https://localhost:$PORT", 10 * 1000, ctx)
           rsp <- c.doGet("/test", headers = Headers("Authorization" -> auth_string))
@@ -146,5 +164,5 @@ object HelloWorldSpec extends ZIOSpecDefault {
         } yield (assertTrue(rsp.status.value == 200 && rsp2.status.value == StatusCode.Forbidden.value))
 
       }
-    ).provide(zio.Runtime.removeDefaultLoggers ++ SLF4J.slf4j ++ env ) @@ sequential
+    ).provide(zio.Runtime.removeDefaultLoggers ++ SLF4J.slf4j ++ env) @@ sequential
 }
