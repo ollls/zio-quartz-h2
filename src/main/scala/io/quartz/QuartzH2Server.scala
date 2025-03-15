@@ -345,26 +345,18 @@ class QuartzH2Server[Env](
   }
 
   def startIO_linuxOnly(
-      rings : Int, 
+      rings: Int,
       pf: HttpRouteIO[Env],
       filter: WebFilter[Env] = (r0: Request) => ZIO.succeed(Right(r0))
   ): ZIO[Env, Throwable, ExitCode] = {
     start_withIOURing(rings, Routes.of[Env](pf, filter), false)
   }
 
-  def start_withIOURing(rings : Int, R: HttpRoute[Env], sync: Boolean): ZIO[Env, Throwable, ExitCode] = {
+  def start_withIOURing(rings: Int, R: HttpRoute[Env], sync: Boolean): ZIO[Env, Throwable, ExitCode] = {
     val cores = Runtime.getRuntime().availableProcessors()
-    val h2streams = cores * 2 // optimal setting tested with h2load
-    // val e = new java.util.concurrent.ForkJoinPool(6)
-    // val ee = zio.Executor.fromJavaExecutor( e )
-    // val e = java.util.concurrent.Executors.newFixedThreadPool(6)
-    // val ee = zio.Executor.fromJavaExecutor( e )
-
+    val h2streams = cores * 2
     if (sslCtx != null) {
-
-      // ZIO.onExecutor( ee )( run4( R, cores, h2streams, h2IdleTimeOutMs ) )
-      run4(rings, R, cores, h2streams, h2IdleTimeOutMs) // .onExecutor( ee )
-
+      run4(rings, R, cores, h2streams, h2IdleTimeOutMs)
     } else {
       ???
     }
@@ -374,38 +366,16 @@ class QuartzH2Server[Env](
   def start(R: HttpRoute[Env], sync: Boolean): ZIO[Env, Throwable, ExitCode] = {
 
     val cores = Runtime.getRuntime().availableProcessors()
-    val h2streams = cores * 2 // optimal setting tested with h2load
+    val h2streams = cores * 4 //max, not always good
 
     if (sync == false) {
-      /*
-      val fjj = new ForkJoinWorkerThreadFactory {
-        val num = new AtomicInteger();
-        def newThread(pool: ForkJoinPool) = {
-          val thread = defaultForkJoinWorkerThreadFactory.newThread(pool);
-          thread.setDaemon(true);
-          thread.setName("qh2-pool" + "-" + num.getAndIncrement());
-          thread;
-        }
-      }*/
-      // val e = new java.util.concurrent.ForkJoinPool(cores) //.ForkJoinPool(cores, fjj, (t, e) => System.exit(0), false)
-      // val e0 = Executors.newFixedThreadPool(cores);
-      // val ec = ExecutionContext.fromExecutor(e)
 
       if (sslCtx != null)
         ZIO.executor.map(_.asExecutionContextExecutorService).flatMap(run0(_, R, cores, h2streams, h2IdleTimeOutMs))
       else
         ZIO.executor.map(_.asExecutionContextExecutorService).flatMap(run3(_, R, cores, h2streams, h2IdleTimeOutMs))
-      // val ee = zio.Executor.fromJavaExecutor( e )
-      // ZIO.onExecutor( ee )( run0( e, R, cores, h2streams, h2IdleTimeOutMs))
-
     } else {
-      // Loom test commented out, just FYI
-      // val e = Executors.newVirtualThreadPerTaskExecutor()
-      // val ec = ExecutionContext.fromExecutor(e)
       run1(R, cores, h2streams, h2IdleTimeOutMs)
-      // val e = new java.util.concurrent.ForkJoinPool(cores)
-      // val ee = zio.Executor.fromJavaExecutor( e )
-      // ZIO.onExecutor( ee )( run1( R, cores, h2streams, h2IdleTimeOutMs))
     }
   }
 
@@ -591,7 +561,7 @@ class QuartzH2Server[Env](
   )
 
   def run4(
-      rings : Int,
+      rings: Int,
       R: HttpRoute[Env],
       maxThreadNum: Int,
       maxStreams: Int,
@@ -600,7 +570,7 @@ class QuartzH2Server[Env](
     for {
 
       addr <- ZIO.attempt(new InetSocketAddress(HOST, PORT))
-      _ <- ZIO.logInfo( s"HTTP/2 TLS Service: QuartzH2 (async - linux io-uring with $rings ring instance(s))")
+      _ <- ZIO.logInfo(s"HTTP/2 TLS Service: QuartzH2 (async - linux io-uring with $rings ring instance(s))")
       _ <- ZIO.logInfo(s"Concurrency level(max threads): $maxThreadNum, max streams per conection: $maxStreams")
       _ <- ZIO.logInfo(s"H2 Idle Timeout: $keepAliveMs Ms")
       _ <- ZIO.logInfo(
