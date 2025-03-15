@@ -354,7 +354,7 @@ class QuartzH2Server[Env](
 
   def start_withIOURing(rings: Int, R: HttpRoute[Env], sync: Boolean): ZIO[Env, Throwable, ExitCode] = {
     val cores = Runtime.getRuntime().availableProcessors()
-    val h2streams = cores * 2
+    val h2streams = cores * 4 //max, not always good
     if (sslCtx != null) {
       run4(rings, R, cores, h2streams, h2IdleTimeOutMs)
     } else {

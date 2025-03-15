@@ -20,8 +20,9 @@ import io.quartz.http2.model.StatusCode
 object HelloWorldSpec extends ZIOSpecDefault {
 
   val PORT = 11443
-  val FOLDER_PATH = "/Users/ostrygun/web_root/"
-  val BIG_FILE = "img_0278.jpeg"
+  val FOLDER_PATH = "/home/ols/web_root/"
+  val BIG_FILE = "IMG_0278.jpeg"
+
   val BLOCK_SIZE = 1024 * 14
 
   val env = ZLayer.fromZIO(ZIO.succeed("Bearer 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"))
@@ -59,7 +60,7 @@ object HelloWorldSpec extends ZIOSpecDefault {
         for {
           ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
           server <- ZIO.attempt(new QuartzH2Server("localhost", PORT.toInt, 15 * 1000, ctx))
-          fib <- (server.startIO(R, sync = false)).fork
+          fib <- (server.startIO_linuxOnly(1, R)).fork
           _ <- live(Clock.sleep(2000.milli))
           c <- QuartzH2Client.open(s"https://localhost:$PORT", 10 * 1000, ctx)
           program = c.doGet("/" + BIG_FILE).flatMap(_.stream.runCount)
@@ -75,7 +76,7 @@ object HelloWorldSpec extends ZIOSpecDefault {
         for {
           ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
           server <- ZIO.attempt(new QuartzH2Server("localhost", PORT.toInt, 16000, ctx))
-          fib <- (server.startIO(R, sync = false)).fork
+          fib <- (server.startIO_linuxOnly(1, R)).fork
           _ <- live(Clock.sleep(2000.milli))
           c <- QuartzH2Client.open(s"https://localhost:$PORT", 1000, ctx)
           file <- ZIO.attempt(new java.io.File(FOLDER_PATH + BIG_FILE))
@@ -91,7 +92,7 @@ object HelloWorldSpec extends ZIOSpecDefault {
         for {
           ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
           server <- ZIO.attempt(new QuartzH2Server("localhost", PORT.toInt, 15 * 1000, ctx))
-          fib <- (server.startIO(R, sync = false)).fork
+          fib <- (server.startIO_linuxOnly(1, R)).fork
           _ <- live(Clock.sleep(2000.milli))
           path <- ZIO.attempt(new java.io.File(FOLDER_PATH + BIG_FILE))
           present <- ZIO.attempt(path.exists())
@@ -135,7 +136,7 @@ object HelloWorldSpec extends ZIOSpecDefault {
           auth_string <- ZIO.environmentWith[String](str => str.get)
           ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
           server <- ZIO.attempt(new QuartzH2Server[String]("localhost", PORT.toInt, 15 * 1000, ctx))
-          fib <- (server.startIO(R, filter, sync = false)).fork
+          fib <- (server.startIO_linuxOnly(1, R, filter)).fork
           _ <- live(Clock.sleep(2000.milli))
           c <- QuartzH2Client.open(s"https://localhost:$PORT", 10 * 1000, ctx)
           rsp <- c.doGet("/test", headers = Headers("Authorization" -> auth_string))

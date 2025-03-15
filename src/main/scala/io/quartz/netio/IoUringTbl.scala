@@ -214,6 +214,7 @@ object IoUringTbl {
     *   IO containing a new IoUringTbl
     */
   def apply[Env](server: QuartzH2Server[Env], count: Int, ringSize: Int = 1024): Task[IoUringTbl] = {
+    IoUringTbl.shutdown = false //important for tests
     ZIO.succeed(setServer(server)) *>
       ZIO
         .foreach(0 until count)(_ =>
