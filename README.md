@@ -12,6 +12,7 @@ ZIO2 native, asynchronous implementation of HTTP/2 packet streaming server with 
 
 - **Java NIO**: Cross-platform compatibility with high performance
 - **Linux IO-Uring**: Native Linux kernel I/O for maximum performance (new in v0.6.0)
+- **Synchronous Mode**: Traditional blocking Java sockets for specific use cases
 
 ``` 
 libraryDependencies += "io.github.ollls" %% "zio-quartz-h2" % "0.6.0"
@@ -49,7 +50,8 @@ exitCode <- new QuartzH2Server(
 
 For a complete working example of IO-Uring implementation, refer to the [examples/IOU/src/main/scala/Run.scala](https://github.com/ollls/zio-quartz-h2/blob/master/examples/IOU/src/main/scala/Run.scala) file in the repository.
 
-The IO-Uring implementation supports both TLS (`run4`) and plain connections (`run5`), providing better performance on Linux systems by leveraging kernel-based asynchronous I/O operations.
+For a complete working example of Java NIO implementation, refer to the [examples/IO/src/main/scala/Run.scala](https://github.com/ollls/zio-quartz-h2/blob/master/examples/IO/src/main/scala/Run.scala) file in the repository.
+
 
 ### Logging.
 
@@ -85,6 +87,9 @@ sbt "run --off"
 - Automatic file saving for multipart uploads
 - Web filter support
 - Configurable logging
+- **Reactive Flow Control**: Advanced backpressure mechanisms that integrate with ZStream
+- **End-to-End Backpressure**: Complete backpressure chain from network socket to application logic
+- **Threshold-Based Window Updates**: Optimized HTTP/2 flow control with intelligent window management
 
 ### Standard support for ZIO Environment.
 
