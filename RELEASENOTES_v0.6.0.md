@@ -1,6 +1,4 @@
-# Quartz H2 Server v6.0.0 Release Notes
-
-![Quartz H2 Server](https://img.shields.io/badge/Quartz%20H2-v6.0.0-blue)
+# Quartz H2 Server v0.6.0 Release Notes
 
 ## 🚀 New Feature: Linux IO-Uring Integration
 
