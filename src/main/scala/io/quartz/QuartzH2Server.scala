@@ -38,6 +38,7 @@ import io.quartz.http2.routes.WebFilter
 import io.quartz.http2.routes.Routes
 import io.quartz.http2.routes.HttpRouteIO
 import io.quartz.util.Utils
+import io.quartz.util.ResponseWriters11
 
 import java.net._
 import java.io._
@@ -219,7 +220,7 @@ class QuartzH2Server[Env](
 
       test <- ZIO.attempt(buf.take(PrefaceString.length))
 
-      testbb <- ZIO.attempt(ByteBuffer.wrap(test.toArray))
+      testbb <- ZIO.attempt(ResponseWriters11.wrapDirect(test.toArray))
       isOK <- ZIO.attempt(Frames.checkPreface(testbb))
       _ <- ZIO.logTrace(s"doConnect() - Preface result: $isOK")
       _ <-
@@ -283,9 +284,9 @@ class QuartzH2Server[Env](
       else
         for {
           _ <- ZIO.logTrace("doConnectUpgrade() - h2c upgrade requested")
-          _ <- ch.write(ByteBuffer.wrap(protoSwitch().getBytes))
+          _ <- ch.write(ResponseWriters11.wrapDirect(protoSwitch().getBytes))
           clientPreface <- ch.read(HTTP1_KEEP_ALIVE_MS)
-          bbuf <- ZIO.attempt(ByteBuffer.wrap(clientPreface.toArray))
+          bbuf <- ZIO.attempt(ResponseWriters11.wrapDirect(clientPreface.toArray))
           isOK <- ZIO.attempt(Frames.checkPreface(bbuf))
           c <-
             if (isOK) Http2Connection.make(ch, id, maxStreams, keepAliveMs, route, incomingWinSize, http11request)
@@ -307,10 +308,7 @@ class QuartzH2Server[Env](
     if (shutdownFlag == false) {
       e match {
         case BadProtocol(ch, e) =>
-          ch.write(Frames.mkGoAwayFrame(0, Error.PROTOCOL_ERROR, e.getBytes))
-          /*ch.write(ByteBuffer.wrap(responseStringNo11().getBytes))*/ *> ZIO.logError(
-            e.toString
-          )
+          ch.write(Frames.mkGoAwayFrame(0, Error.PROTOCOL_ERROR, e.getBytes)) *> ZIO.logError(e.toString)
         case e: java.nio.channels.InterruptedByTimeoutException =>
           ZIO.logInfo("Remote peer disconnected on timeout")
         case e: java.nio.channels.ClosedChannelException =>
