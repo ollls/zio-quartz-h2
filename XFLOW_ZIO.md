@@ -1,5 +1,41 @@
 # HTTP/2 Flow Control Implementation in ZIO Quartz H2 Server
 
+## Reactive Flow Control: The ZIO Quartz H2 Advantage
+
+ZIO Quartz H2 implements a cutting-edge reactive flow control system that seamlessly integrates with the ZIO streaming ecosystem. This implementation goes beyond the standard HTTP/2 flow control requirements to deliver exceptional performance, stability, and resource efficiency.
+
+### Inbound Traffic: Intelligent Reactive Backpressure
+
+The inbound data flow in ZIO Quartz H2 is regulated by a sophisticated backpressure mechanism that adapts to application processing capabilities in real-time:
+
+- **Application-Aware Flow Control**: Unlike conventional implementations, our system monitors actual data consumption rates through the ZStream pipeline.
+
+- **Adaptive Backpressure**: When application processing slows down, the system automatically throttles incoming data by delaying WINDOW_UPDATE frames, preventing buffer bloat and memory pressure.
+
+- **Precise Resource Management**: The dual-counter approach (`bytesOfPendingInboundData` and `inboundWindow`) creates a feedback loop that ensures optimal resource utilization even under variable load conditions.
+
+### Outbound Traffic: Responsive Transmission Control
+
+The outbound data flow is equally well-regulated, ensuring efficient data delivery without overwhelming receivers:
+
+- **Credit-Based Transmission**: The system precisely tracks available transmission windows and suspends data transmission when credits are exhausted.
+
+- **Non-Blocking Wait Mechanism**: When window limits are reached, transmissions elegantly pause using ZIO's concurrency primitives, without blocking system resources.
+
+- **Immediate Reactivity**: When client WINDOW_UPDATE frames arrive, transmission resumes instantly, maintaining maximum throughput while respecting flow control constraints.
+
+This bidirectional reactive flow control system ensures ZIO Quartz H2 maintains optimal performance under diverse network conditions and application workloads, making it an ideal choice for high-throughput, low-latency HTTP/2 applications.
+
+### Beyond Traditional HTTP/2 Implementations
+
+While most HTTP/2 implementations merely satisfy the specification requirements, ZIO Quartz H2 takes flow control to the next level:
+
+- **End-to-End Backpressure**: Unlike traditional implementations that only manage protocol-level flow control, ZIO Quartz H2 creates a complete backpressure chain from the network socket all the way to your application logic.
+
+- **Threshold-Based Window Updates**: Rather than sending WINDOW_UPDATE frames at fixed intervals, ZIO Quartz H2 intelligently determines when updates are needed based on consumption patterns, reducing protocol overhead.
+
+- **ZIO Integration**: By leveraging ZIO's powerful concurrency primitives, the flow control system achieves high efficiency with minimal resource consumption, even under extreme load conditions.
+
 This document describes the implementation of HTTP/2 flow control in the ZIO Quartz H2 server. It explains how the server manages both inbound and outbound data flow, ensuring efficient resource utilization and preventing memory exhaustion.
 
 ## Overview
