@@ -75,10 +75,10 @@ object MyApp extends ZIOAppDefault {
 
     // automatic multi-part upload, file names preserved
     case req @ POST -> Root / "mpart" =>
-      MultiPart.writeAll(req, "/Users/ostrygun/") *> ZIO.succeed(Response.Ok())
+      MultiPart.writeAll(req, "web_root/") *> ZIO.succeed(Response.Ok())
 
     case req @ POST -> Root / "upload" / StringVar(file) =>
-      val FOLDER_PATH = "/Users/ostrygun/web_root/"
+      val FOLDER_PATH = "web_root/"
       val FILE = s"$file"
       for {
         jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
@@ -117,9 +117,9 @@ object MyApp extends ZIOAppDefault {
       val ts = ZStream.fromChunks(Chunk.fromArray("Block1\n".getBytes()), Chunk.fromArray("Block22\n".getBytes()))
       ZIO.attempt(Response.Ok().asStream(ts))
 
-    case GET -> Root / StringVar(file) =>
-      val FOLDER_PATH = "/home/ols/web_root/"
-      val FILE = s"$file"
+    case GET -> "doc" /: remainingPath =>  
+      val FOLDER_PATH = "web_root/doc/"
+      val FILE = s"$remainingPath"
       val BLOCK_SIZE = 1024 * 14
       for {
         jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
