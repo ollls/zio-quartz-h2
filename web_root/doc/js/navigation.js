@@ -50,6 +50,22 @@ document.addEventListener('DOMContentLoaded', function() {
             <span class="font-medium">Flow Control</span>
           </a>
         </li>
+        <li>
+          <a href="/doc/zionio.html" class="flex items-center px-4 py-3 text-gray-700 ${currentPath.includes('/zionio.html') ? 'active-menu-item' : ''} menu-item">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <span class="font-medium">ZIO Async for Java NIO</span>
+          </a>
+        </li>
+        <li>
+          <a href="/doc/zio-iouring.html" class="flex items-center px-4 py-3 text-gray-700 ${currentPath.includes('/zio-iouring.html') ? 'active-menu-item' : ''} menu-item">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <span class="font-medium">ZIO Async for IoUring</span>
+          </a>
+        </li>
       </ul>
     </nav>
   `;

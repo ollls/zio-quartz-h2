@@ -28,6 +28,29 @@
             background-color: #ebf5ff;
             border-left: 3px solid #3182ce;
         }
+        /* Content area list styles */
+        .content-area ul, .content-area ol {
+            margin-left: 1.5rem;
+            margin-bottom: 1rem;
+            list-style-position: outside;
+        }
+        .content-area ul {
+            list-style-type: disc;
+        }
+        .content-area ol {
+            list-style-type: decimal;
+        }
+        .content-area li {
+            margin-bottom: 0.5rem;
+        }
+        /* Navigation list styles - remove bullets */
+        #sidebar-container ul {
+            list-style-type: none;
+            margin-left: 0;
+        }
+        #sidebar-container li {
+            margin-bottom: 0;
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800">
@@ -39,7 +62,7 @@
 
         <!-- Main Content -->
         <div class="flex-1 overflow-auto p-8">
-            <div class="max-w-4xl mx-auto">
+            <div class="max-w-4xl mx-auto content-area">
                 <h1 class="text-3xl font-bold text-blue-600 mb-6 pb-2 border-b border-gray-200">ZIO Quartz H2 Routes DSL</h1>
                 
                 <div class="space-y-12">
