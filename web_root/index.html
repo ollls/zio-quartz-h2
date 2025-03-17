@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZIO Quartz H2 - Documentation</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .menu-item:hover {
+            background-color: #f7fafc;
+        }
+        .active-menu-item {
+            background-color: #ebf5ff;
+            border-left: 3px solid #3182ce;
+        }
+        .hero-image {
+            max-height: 180px;
+            object-fit: contain;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+    <div class="flex h-screen overflow-hidden">
+        <!-- Left Sidebar -->
+        <div id="sidebar-container" class="w-64 bg-white shadow-md flex-shrink-0 overflow-auto">
+            <!-- Navigation will be inserted here by JavaScript -->
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex-1 overflow-auto p-8">
+            <div class="max-w-4xl mx-auto">
+                <!-- Header with Logo -->
+                <div class="flex flex-col md:flex-row items-center justify-between mb-8 pb-4 border-b border-gray-200">
+                    <div class="flex items-center mb-4 md:mb-0">
+                        <img src="/doc/quartz-h2.jpeg" alt="ZIO Quartz H2 Logo" class="hero-image mr-4 rounded-lg shadow-md">
+                        <h1 class="text-3xl font-bold text-blue-600">ZIO Quartz H2 Example</h1>
+                    </div>
+                </div>
+                
+                <p class="text-lg mb-6">This is a demonstration of serving static files with ZIO Quartz H2 HTTP/2 server.</p>
+                
+                <div class="bg-blue-50 p-6 rounded-lg border-l-4 border-blue-500 mb-8">
+                    <h2 class="text-xl font-semibold text-blue-700 mb-3">Available Routes</h2>
+                    <ul class="space-y-2">
+                        <li class="flex items-start">
+                            <code class="bg-white px-2 py-1 rounded text-blue-600 font-mono mr-2">/</code>
+                            <span>Returns a simple OK response</span>
+                        </li>
+                        <li class="flex items-start">
+                            <code class="bg-white px-2 py-1 rounded text-blue-600 font-mono mr-2">/hello</code>
+                            <span>Returns a greeting message. Add ?name=YourName to personalize it</span>
+                        </li>
+                        <li class="flex items-start">
+                            <code class="bg-white px-2 py-1 rounded text-blue-600 font-mono mr-2">/doc/*</code>
+                            <span>Serves static files from the web_root directory</span>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="bg-white shadow-md rounded-lg p-6 mb-8">
+                    <h2 class="text-xl font-semibold text-blue-600 mb-4">Server Features</h2>
+                    <ul class="list-disc pl-5 space-y-2">
+                        <li>HTTP/2 protocol support with TLS</li>
+                        <li>Efficient static file serving with automatic content type detection</li>
+                        <li>Functional route definition using ZIO</li>
+                        <li>Streaming response support</li>
+                        <li>Middleware support for request/response transformation</li>
+                    </ul>
+                </div>
+                
+                <div class="bg-white shadow-md rounded-lg p-6">
+                    <h2 class="text-xl font-semibold text-blue-600 mb-4">Documentation</h2>
+                    <p class="mb-4">Explore the documentation to learn more about ZIO Quartz H2:</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <a href="/doc/routes.html" class="block p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+                            <h3 class="text-lg font-medium text-blue-700">Routes DSL</h3>
+                            <p class="text-gray-600">Learn how to define routes using the functional DSL</p>
+                        </a>
+                        <a href="/doc/streams.html" class="block p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+                            <h3 class="text-lg font-medium text-blue-700">ZStreams Integration</h3>
+                            <p class="text-gray-600">Discover how to use ZIO Streams with Quartz H2</p>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/doc/js/navigation.js"></script>
+</body>
+</html>
