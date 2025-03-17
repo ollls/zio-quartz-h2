@@ -34,6 +34,22 @@ document.addEventListener('DOMContentLoaded', function() {
             <span class="font-medium">ZStreams</span>
           </a>
         </li>
+        <li>
+          <a href="/doc/architecture.html" class="flex items-center px-4 py-3 text-gray-700 ${currentPath.includes('/architecture.html') ? 'active-menu-item' : ''} menu-item">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            <span class="font-medium">Architecture</span>
+          </a>
+        </li>
+        <li>
+          <a href="/doc/xflow.html" class="flex items-center px-4 py-3 text-gray-700 ${currentPath.includes('/xflow.html') ? 'active-menu-item' : ''} menu-item">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+            </svg>
+            <span class="font-medium">Flow Control</span>
+          </a>
+        </li>
       </ul>
     </nav>
   `;

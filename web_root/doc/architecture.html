@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZIO Quartz H2 - Architecture</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .menu-item:hover {
+            background-color: #f7fafc;
+        }
+        .active-menu-item {
+            background-color: #ebf5ff;
+            border-left: 3px solid #3182ce;
+        }
+        .hero-image {
+            max-height: 180px;
+            object-fit: contain;
+        }
+        code {
+            background-color: #f1f5f9;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        pre {
+            background-color: #f1f5f9;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+    <div class="flex h-screen overflow-hidden">
+        <!-- Left Sidebar -->
+        <div id="sidebar-container" class="w-64 bg-white shadow-md flex-shrink-0 overflow-auto">
+            <!-- Navigation will be inserted here by JavaScript -->
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex-1 overflow-auto p-8">
+            <div class="max-w-4xl mx-auto">
+                <!-- Header with Logo -->
+                <div class="flex flex-col md:flex-row items-center justify-between mb-8 pb-4 border-b border-gray-200">
+                    <div class="flex items-center mb-4 md:mb-0">
+                        <img src="/doc/quartz-h2.jpeg" alt="ZIO Quartz H2 Logo" class="hero-image mr-4 rounded-lg shadow-md">
+                        <h1 class="text-3xl font-bold text-blue-600">ZIO Quartz H2 Architecture</h1>
+                    </div>
+                </div>
+                
+                <p class="text-lg mb-6">This document outlines the architecture of the HTTP/2 connection implementation in ZIO Quartz H2, with a focus on how ZIO Queues and ZStreams are utilized for efficient data flow management.</p>
+
+                <!-- HTTP/2 Connection Flow Diagram -->
+                <div class="bg-white shadow-md rounded-lg p-6 mb-8">
+                    <h2 class="text-xl font-semibold text-blue-600 mb-4">HTTP/2 Connection Flow Diagram</h2>
+                    
+                    <pre class="text-sm">
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           QuartzH2Server                                 │
+└─────────────────────────────────────┬─────────────────────────────────────┘
+                                     │ creates
+                                     ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           Http2Connection                               │
+│                                                                         │
+│  ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐  │
+│  │  Outbound Queue │      │  Flow Control   │      │ Stream Table    │  │
+│  │  (outq)         │◄────►│  Management     │◄────►│ (streamTbl)     │  │
+│  └─────────────────┘      └─────────────────┘      └─────────────────┘  │
+│           ▲                        ▲                        ▲            │
+│           │                        │                        │            │
+│           ▼                        ▼                        ▼            │
+│  ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐  │
+│  │ Outbound Worker │      │ Packet Handler  │      │ Http2Stream(s)  │  │
+│  │ Process         │◄────►│                 │◄────►│                 │  │
+│  └─────────────────┘      └─────────────────┘      └─────────────────┘  │
+│                                    ▲                        ▲            │
+└────────────────────────────────────┼────────────────────────┼────────────┘
+                                     │                        │
+                                     ▼                        ▼
+┌──────────────────────────────────┐    ┌──────────────────────────┐
+│         IOChannel                 │    │      Http Route          │
+└──────────────────────────────────┘    └──────────────────────────┘
+                    </pre>
+                </div>
+
+                <!-- Functional Stream Processing with ZStream -->
+                <div class="bg-white shadow-md rounded-lg p-6 mb-8">
+                    <h2 class="text-xl font-semibold text-blue-600 mb-4">Functional Stream Processing with ZStream</h2>
+                    
+                    <p class="mb-4">ZIO Quartz H2 leverages ZIO's functional streams (ZStream) as a core abstraction for processing HTTP/2 data. Unlike traditional imperative streams, ZStream represents a <em>description</em> of data transformations that are executed only when the stream is run. This functional approach provides several benefits:</p>
+                    
+                    <ol class="list-decimal pl-6 mb-4 space-y-2">
+                        <li><strong>Composability</strong>: Stream transformations can be composed together without side effects</li>
+                        <li><strong>Resource Safety</strong>: Resources are properly acquired and released</li>
+                        <li><strong>Backpressure</strong>: Automatic handling of backpressure throughout the pipeline</li>
+                        <li><strong>Error Handling</strong>: Structured error handling within the stream processing pipeline</li>
+                    </ol>
+
+                    <h3 class="text-lg font-medium text-blue-700 mb-2">Key ZStream Transformations</h3>
+                    <ul class="list-disc pl-6 mb-4 space-y-2">
+                        <li><strong><code>makePacketStream</code></strong>: Creates a ZStream that reads from the IOChannel and transforms raw bytes into HTTP/2 packets</li>
+                        <li><strong><code>packetStreamPipe</code></strong>: A ZPipeline that transforms a stream of bytes into a stream of HTTP/2 frames</li>
+                        <li><strong><code>dataEvalEffectProducer</code></strong>: Produces data from queues as a ZStream transformation</li>
+                    </ul>
+                </div>
+
+                <!-- ZIO Queue Usage -->
+                <div class="bg-white shadow-md rounded-lg p-6 mb-8">
+                    <h2 class="text-xl font-semibold text-blue-600 mb-4">ZIO Queue Usage</h2>
+                    
+                    <p class="mb-4">The HTTP/2 connection implementation in ZIO Quartz H2 makes extensive use of ZIO Queues for managing data flow between different components. Here are the key queues used in the system:</p>
+
+                    <h3 class="text-lg font-medium text-blue-700 mb-2">1. Outbound Queue (<code>outq</code>)</h3>
+                    <ul class="list-disc pl-6 mb-4">
+                        <li><strong>Purpose</strong>: Manages outgoing data packets (ByteBuffers) to be sent to the client</li>
+                        <li><strong>Type</strong>: <code>Queue[ByteBuffer]</code></li>
+                        <li><strong>Capacity</strong>: Bounded queue with capacity of 1024</li>
+                        <li><strong>Creation</strong>: Created during the initialization of an HTTP/2 connection</li>
+                        <li><strong>Usage</strong>: All outgoing frames are offered to this queue and processed by the outbound worker</li>
+                    </ul>
+
+                    <h3 class="text-lg font-medium text-blue-700 mb-2">2. Stream Flow Control Queues</h3>
+                    <p class="mb-2">Each HTTP/2 stream has several queues to manage its data flow:</p>
+
+                    <h4 class="text-md font-medium text-blue-600 mb-1">a. Data Input Queue (<code>inDataQ</code>)</h4>
+                    <ul class="list-disc pl-6 mb-3">
+                        <li><strong>Purpose</strong>: Accumulates incoming data packets for a specific stream</li>
+                        <li><strong>Type</strong>: <code>Queue[ByteBuffer]</code></li>
+                        <li><strong>Capacity</strong>: Unbounded queue</li>
+                        <li><strong>Creation</strong>: Created when a new stream is opened</li>
+                        <li><strong>Usage</strong>: Stores incoming DATA frames for processing by the application</li>
+                    </ul>
+
+                    <h4 class="text-md font-medium text-blue-600 mb-1">b. Flow Control Sync Queue (<code>outXFlowSync</code>)</h4>
+                    <ul class="list-disc pl-6 mb-3">
+                        <li><strong>Purpose</strong>: Synchronizes flow control for outgoing data frames</li>
+                        <li><strong>Type</strong>: <code>Queue[Boolean]</code></li>
+                        <li><strong>Capacity</strong>: Unbounded queue</li>
+                        <li><strong>Creation</strong>: Created when a new stream is opened</li>
+                        <li><strong>Usage</strong>: Signals when the stream can send more data based on flow control window updates</li>
+                    </ul>
+
+                    <h4 class="text-md font-medium text-blue-600 mb-1">c. Window Update Sync Queue (<code>syncUpdateWindowQ</code>)</h4>
+                    <ul class="list-disc pl-6 mb-3">
+                        <li><strong>Purpose</strong>: Manages window update synchronization</li>
+                        <li><strong>Type</strong>: <code>Queue[Unit]</code></li>
+                        <li><strong>Capacity</strong>: Dropping queue with capacity of 1</li>
+                        <li><strong>Creation</strong>: Created when a new stream is opened</li>
+                        <li><strong>Usage</strong>: Coordinates window updates for flow control</li>
+                    </ul>
+                </div>
+
+                <!-- Data Flow Process -->
+                <div class="bg-white shadow-md rounded-lg p-6 mb-8">
+                    <h2 class="text-xl font-semibold text-blue-600 mb-4">Data Flow Process</h2>
+                    
+                    <h3 class="text-lg font-medium text-blue-700 mb-2">Incoming Data Flow</h3>
+                    <ol class="list-decimal pl-6 mb-6 space-y-3">
+                        <li>
+                            <strong>Data Reception as ZStream</strong>:
+                            <ul class="list-disc pl-6 mt-1">
+                                <li>The <code>processIncoming</code> method sets up a ZStream pipeline starting with leftover data</li>
+                                <li><code>makePacketStream</code> creates a ZStream that reads from the IOChannel and transforms raw bytes into HTTP/2 packets</li>
+                                <li>This is a <em>description</em> of the transformation, not the actual execution</li>
+                            </ul>
+                        </li>
+                        <li>
+                            <strong>Stream Transformation</strong>:
+                            <ul class="list-disc pl-6 mt-1">
+                                <li>The byte stream is transformed via the <code>packetStreamPipe</code> ZPipeline</li>
+                                <li>This pipeline chunks the bytes into proper HTTP/2 frames</li>
+                                <li>The transformation is applied lazily when the stream is consumed</li>
+                            </ul>
+                        </li>
+                        <li>
+                            <strong>Stream Consumption</strong>:
+                            <ul class="list-disc pl-6 mt-1">
+                                <li>The transformed stream is consumed with <code>foreach</code>, which applies <code>packet_handler</code> to each packet</li>
+                                <li>Only at this point is the actual I/O performed and frames processed</li>
+                            </ul>
+                        </li>
+                        <li>
+                            <strong>Packet Handling</strong>:
+                            <ul class="list-disc pl-6 mt-1">
+                                <li>Each packet is processed by the <code>packet_handler</code> method</li>
+                                <li>Frames are parsed and handled according to their type (HEADERS, DATA, SETTINGS, etc.)</li>
+                            </ul>
+                        </li>
+                        <li>
+                            <strong>Stream Data Processing</strong>:
+                            <ul class="list-disc pl-6 mt-1">
+                                <li>For DATA frames, the data is placed in the appropriate stream's <code>inDataQ</code></li>
+                                <li>Flow control is managed by updating window sizes and sending WINDOW_UPDATE frames when necessary</li>
+                            </ul>
+                        </li>
+                    </ol>
+
+                    <h3 class="text-lg font-medium text-blue-700 mb-2">Outgoing Data Flow</h3>
+                    <ol class="list-decimal pl-6 mb-6 space-y-3">
+                        <li>
+                            <strong>Frame Generation</strong>:
+                            <ul class="list-disc pl-6 mt-1">
+                                <li>Outgoing frames are created using methods like <code>headerFrame</code> and <code>dataFrame</code></li>
+                                <li>These frames are offered to the <code>outq</code> queue</li>
+                            </ul>
+                        </li>
+                        <li>
+                            <strong>Outbound Processing</strong>:
+                            <ul class="list-disc pl-6 mt-1">
+                                <li>The <code>outBoundWorkerProc</code> continuously takes frames from the <code>outq</code> queue</li>
+                                <li>It writes the frames to the IOChannel for transmission to the client</li>
+                            </ul>
+                        </li>
+                        <li>
+                            <strong>Flow Control Management</strong>:
+                            <ul class="list-disc pl-6 mt-1">
+                                <li>Before sending DATA frames, the system checks both global and stream-specific flow control windows</li>
+                                <li>The <code>txWindow_Transmit</code> method handles the logic for splitting frames if necessary based on available window size</li>
+                                <li>The <code>outXFlowSync</code> queue is used to signal when more data can be sent after window updates</li>
+                            </ul>
+                        </li>
+                        <li>
+                            <strong>Response Streaming</strong>:
+                            <ul class="list-disc pl-6 mt-1">
+                                <li>When sending response bodies, data is often provided as a ZStream</li>
+                                <li>This allows for efficient streaming of large responses without loading everything into memory</li>
+                                <li>The ZStream is consumed and transformed into HTTP/2 DATA frames as needed</li>
+                            </ul>
+                        </li>
+                    </ol>
+                </div>
+
+                <!-- Key Components -->
+                <div class="bg-white shadow-md rounded-lg p-6 mb-8">
+                    <h2 class="text-xl font-semibold text-blue-600 mb-4">Key Components</h2>
+                    
+                    <h3 class="text-lg font-medium text-blue-700 mb-2">Http2Connection</h3>
+                    <p class="mb-4">The main class that manages an HTTP/2 connection. It extends <code>Http2ConnectionCommon</code> and implements the core HTTP/2 protocol logic.</p>
+
+                    <h3 class="text-lg font-medium text-blue-700 mb-2">Http2ConnectionCommon</h3>
+                    <p class="mb-4">A trait that provides common functionality for HTTP/2 connections, including methods for creating and sending frames.</p>
+
+                    <h3 class="text-lg font-medium text-blue-700 mb-2">Http2Stream</h3>
+                    <p class="mb-4">Represents an individual HTTP/2 stream within a connection. Each stream has its own set of queues for managing data flow.</p>
+
+                    <h3 class="text-lg font-medium text-blue-700 mb-2">Flow Control</h3>
+                    <p class="mb-4">HTTP/2 implements flow control at two levels:</p>
+                    <ol class="list-decimal pl-6 mb-4">
+                        <li><strong>Connection-Level</strong>: Managed by <code>globalTransmitWindow</code> and <code>globalInboundWindow</code></li>
+                        <li><strong>Stream-Level</strong>: Each stream has its own <code>transmitWindow</code> and <code>inboundWindow</code></li>
+                    </ol>
+                    <p>ZIO Queues play a crucial role in coordinating these flow control mechanisms, ensuring efficient data transmission while preventing buffer bloat and resource exhaustion.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/doc/js/navigation.js"></script>
+</body>
+</html>

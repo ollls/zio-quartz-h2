@@ -36,7 +36,7 @@ object MyApp extends ZIOAppDefault {
       )
     )
 
-  val R: HttpRouteIO[String] =
+  val R: HttpRouteIO[String] = {
     case req @ GET -> Root / "ldt" =>
       for {
         time <- ZIO.succeed(java.time.LocalDateTime.now())
@@ -117,7 +117,7 @@ object MyApp extends ZIOAppDefault {
       val ts = ZStream.fromChunks(Chunk.fromArray("Block1\n".getBytes()), Chunk.fromArray("Block22\n".getBytes()))
       ZIO.attempt(Response.Ok().asStream(ts))
 
-    case GET -> "doc" /: remainingPath =>  
+    case GET -> "doc" /: remainingPath =>
       val FOLDER_PATH = "web_root/doc/"
       val FILE = s"$remainingPath"
       val BLOCK_SIZE = 1024 * 14
@@ -129,6 +129,20 @@ object MyApp extends ZIOAppDefault {
         .Ok()
         .asStream(ZStream.fromFile(jpath, BLOCK_SIZE))
         .contentType(ContentType.contentTypeFromFileName(FILE)))
+
+    case GET -> Root / StringVar(file) =>
+      val FOLDER_PATH = "web_root/"
+      val FILE = s"$file"
+      val BLOCK_SIZE = 1024 * 14
+      for {
+        jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
+        present <- ZIO.attempt(jpath.exists())
+        _ <- ZIO.fail(new java.io.FileNotFoundException(jpath.toString())).when(present == false)
+      } yield (Response
+        .Ok()
+        .asStream(ZStream.fromFile(jpath, BLOCK_SIZE))
+        .contentType(ContentType.contentTypeFromFileName(FILE)))
+  }
 
   def onConnect(id: Long) = {
     ZIO.logTrace(s"connected - $id")
