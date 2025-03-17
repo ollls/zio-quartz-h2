@@ -119,7 +119,7 @@ object MyApp extends ZIOAppDefault {
 
     case GET -> "doc" /: remainingPath =>
       val FOLDER_PATH = "web_root/doc/"
-      val FILE = s"$remainingPath"
+      val FILE = if (remainingPath.toString.isEmpty) "index.html" else remainingPath.toString
       val BLOCK_SIZE = 1024 * 14
       for {
         jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
