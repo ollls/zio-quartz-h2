@@ -153,9 +153,12 @@ object MyApp extends ZIOAppDefault {
   }
 
   def run = {
-    val IOU_RINGS = 1
     val env = ZLayer.fromZIO(ZIO.succeed("Hello ZIO World!"))
     (for {
+      _ <- zio.Console.printLine("****************************************************************************************")
+      _ <- zio.Console.printLine("\u001B[31mUse https://localhost:8443/doc/index.html to read the index.html file\u001B[0m")
+      _ <- zio.Console.printLine("****************************************************************************************")
+
       args <- this.getArgs
       _ <- ZIO.when(args.find(_ == "--debug").isDefined)(ZIO.attempt(QuartzH2Server.setLoggingLevel(Level.DEBUG)))
       _ <- ZIO.when(args.find(_ == "--error").isDefined)(ZIO.attempt(QuartzH2Server.setLoggingLevel(Level.ERROR)))
