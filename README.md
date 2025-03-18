@@ -78,7 +78,7 @@ sbt "run --off"
 ## Features
 
 - HTTP/2 with TLS encryption and ALPN h2 tag
-- HTTP/1.1 support
+- HTTP/1.1 support, chunked encoding only
 - Multiple I/O implementations (Java NIO and Linux IO-Uring)
 - ZIO2 native implementation
 - High-performance packet streaming
