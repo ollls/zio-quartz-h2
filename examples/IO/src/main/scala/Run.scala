@@ -153,7 +153,6 @@ object MyApp extends ZIOAppDefault {
   }
 
   def run = {
-    val IOU_RINGS = 1
     val env = ZLayer.fromZIO(ZIO.succeed("Hello ZIO World!"))
     (for {
       args <- this.getArgs
