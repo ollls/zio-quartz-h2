@@ -1,15 +1,21 @@
 <img src="quartz-h2.jpeg" width="84" title="quartz-h2"/>
 
-[![Generic badge](https://img.shields.io/badge/zio--quartz--h2-0.5.7-blue)](https://repo1.maven.org/maven2/io/github/ollls/zio-quartz-h2_3/0.5.7)
+[![Generic badge](https://img.shields.io/badge/zio--quartz--h2-0.6.0-blue)](https://repo1.maven.org/maven2/io/github/ollls/zio-quartz-h2_3/0.6.0)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=ollls_zio-quartz-h2&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=ollls_zio-quartz-h2)
 
-# Asynchronous Java NIO **http/2 TLS** packet streaming server/client.
-It's now with HTTP/1.1
+# Asynchronous HTTP/2 TLS packet streaming server/client with multiple I/O options
+It now supports HTTP/1.1 and IO-Uring on Linux platforms
 
-ZIO2 native,asynchronous,Java NIO based implementation of http/2 packet streaming server with TLS encryption implemented as scala ZIO2 effect with ALPN h2 tag. Direct native translation of ZIO ZStream chunks into http2 packets (inbound and outbound). Tested and optimized to produce highest possible TPS. Server supports http multipart with ZStream interface along with automatic file saving for file based multipart uploads.
+ZIO2 native, asynchronous implementation of HTTP/2 packet streaming server with TLS encryption implemented as scala ZIO2 effect with ALPN h2 tag. Direct native translation of ZIO ZStream chunks into HTTP/2 packets (inbound and outbound). Tested and optimized to produce highest possible TPS. Server supports HTTP multipart with ZStream interface along with automatic file saving for file based multipart uploads.
+
+## I/O Implementation Options
+
+- **Java NIO**: Cross-platform compatibility with high performance
+- **Linux IO-Uring**: Native Linux kernel I/O for maximum performance (new in v0.6.0)
+- **Synchronous Mode**: Traditional blocking Java sockets for specific use cases
 
 ``` 
-libraryDependencies += "io.github.ollls" %% "zio-quartz-h2" % "0.5.5"
+libraryDependencies += "io.github.ollls" %% "zio-quartz-h2" % "0.6.0"
 ```
 
 to run example from zio-quartz-h2 code base directly
@@ -17,6 +23,35 @@ to run example from zio-quartz-h2 code base directly
 ```
 sbt IO/run
 ```
+
+## Using IO-Uring on Linux
+
+To utilize the new IO-Uring implementation on Linux platforms:
+
+```scala
+// Configure the number of IO-Uring instances
+val NUMBER_OF_RING_INSTANCES = 1
+
+// Recommended ZIO Runtime configuration for IO-Uring
+override val bootstrap = zio.Runtime.removeDefaultLoggers ++ SLF4J.slf4j ++ zio.Runtime.setExecutor(
+  zio.Executor.fromJavaExecutor(Executors.newWorkStealingPool(Runtime.getRuntime().availableProcessors() - NUMBER_OF_RING_INSTANCES))
+) ++ zio.Runtime.setBlockingExecutor(zio.Executor.fromJavaExecutor(Executors.newCachedThreadPool()))
+
+// Start server with IO-Uring
+exitCode <- new QuartzH2Server(
+  "localhost",
+  8443,
+  16000,
+  ctx,
+  onConnect = onConnect,
+  onDisconnect = onDisconnect
+).startIO_linuxOnly(NUMBER_OF_RING_INSTANCES, R, filter)
+```
+
+For a complete working example of IO-Uring implementation, refer to the [examples/IOU/src/main/scala/Run.scala](https://github.com/ollls/zio-quartz-h2/blob/master/examples/IOU/src/main/scala/Run.scala) file in the repository.
+
+For a complete working example of Java NIO implementation, refer to the [examples/IO/src/main/scala/Run.scala](https://github.com/ollls/zio-quartz-h2/blob/master/examples/IO/src/main/scala/Run.scala) file in the repository.
+
 
 ### Logging.
 
@@ -29,14 +64,32 @@ sbt "run --error"
 sbt "run --off"
 ```
 
+## Version Information
 
-### 0.5.4 template example: client/server (quartz-h2 HTTP/2 client only supports TLS with ALPN H2 HTTP/2 hosts)<br>
-https://github.com/ollls/zio-quartz-demo
+- **Current Version**: 0.6.0
+- **Major Changes**: Added Linux IO-Uring support, upgraded to Scala 3.3, updated logback-classic to 1.5.17
+
+### Template Examples
 * Template project with use cases, `sbt run`:<br>https://github.com/ollls/zio-qh2-examples
 * Use cases:<br> https://github.com/ollls/zio-quartz-h2/blob/master/examples/IO/src/main/scala/Run.scala, to run: `sbt IO/run`
 * To debug: switch to "debug" or 'trace" in logback-test.xml, **use "off" or "error" for performace tests with wrk and h2load**. 
 * You may look at the quartz-h2 CATS port https://github.com/ollls/quartz-h2
 <br>
+
+## Features
+
+- HTTP/2 with TLS encryption and ALPN h2 tag
+- HTTP/1.1 support
+- Multiple I/O implementations (Java NIO and Linux IO-Uring)
+- ZIO2 native implementation
+- High-performance packet streaming
+- HTTP multipart support with ZStream interface
+- Automatic file saving for multipart uploads
+- Web filter support
+- Configurable logging
+- **Reactive Flow Control**: Advanced backpressure mechanisms that integrate with ZStream
+- **End-to-End Backpressure**: Complete backpressure chain from network socket to application logic
+- **Threshold-Based Window Updates**: Optimized HTTP/2 flow control with intelligent window management
 
 ### Standard support for ZIO Environment.
 
@@ -51,6 +104,7 @@ def run =
     } yield (exitCode)).provideSomeLayer( env )
 
 ```
+
 ### Webfilter support with Either[Response, Request]. Provide filter as a parameter QuartzH2Server()
 
 ```scala
@@ -149,10 +203,3 @@ time for request:      231us    144.82ms     19.31ms     10.02ms    73.06%
 time for connect:     7.39ms    860.22ms    385.69ms    278.36ms    54.90%
 time to 1st byte:     9.10ms    875.77ms    398.01ms    282.96ms    54.90%
 req/s           :       0.00     1489.99      959.99      563.28    75.00%
-
-
-```
-
-
-
-

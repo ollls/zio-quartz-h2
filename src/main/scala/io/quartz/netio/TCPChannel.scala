@@ -93,7 +93,7 @@ class TCPChannel(val ch: AsynchronousSocketChannel) extends IOChannel {
   // ch.setOption(StandardSocketOptions.SO_KEEPALIVE, true);
   var f_putBack: ByteBuffer = null
 
-  private[netio] def put(bb: ByteBuffer): Task[Unit] = ZIO.attempt { f_putBack = bb }
+  def put(bb: ByteBuffer): Task[Unit] = ZIO.attempt { f_putBack = bb }
 
   def readBuffer(
       dst: ByteBuffer,

@@ -27,7 +27,7 @@ object Http2Connection {
     (for {
       bb <- outq.take
       // empty array is a termination signal
-      _ <- ZIO.when(bb.array().length == 0)(ZIO.fail(new Exception("Shutdown outbound H2 packet sender")))
+      _ <- ZIO.when(bb.capacity() == 0)(ZIO.fail(new Exception("Shutdown outbound H2 packet sender")))
       _ <- ch.write(bb)
     } yield (true)).catchAll(e =>
       ZIO.logDebug("outBoundWorkerProc fiber: " + e.toString()) *> outq.shutdown *> shutdownPromise.succeed(true) *> ZIO
@@ -820,7 +820,10 @@ class Http2Connection[Env](
     case e @ _ => {
       ZIO.logError(e.toString())
     }
-  }
+  }.catchAllDefect { throwable =>
+  ZIO.logError(s"Unexpected error: ${throwable.getMessage}")
+  //ZIO.fail(SystemFailure(throwable))
+}
 
   ////////////////////////////////////////////////////
   def packet_handler(

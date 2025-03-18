@@ -19,13 +19,20 @@ import zio.LogLevel
 
 import io.quartz.util.MultiPart
 import io.quartz.http2.model.StatusCode
+import java.util.concurrent.Executors
 
 object param1 extends QueryParam("param1")
 object param2 extends QueryParam("param2")
 
 object MyApp extends ZIOAppDefault {
 
-  override val bootstrap = zio.Runtime.removeDefaultLoggers ++ SLF4J.slf4j ++ zio.Runtime.enableWorkStealing
+  val NUMBER_OF_RING_INSTANCES = 1
+
+  override val bootstrap = zio.Runtime.removeDefaultLoggers ++ SLF4J.slf4j ++ zio.Runtime.setExecutor(
+    zio.Executor.fromJavaExecutor(
+      Executors.newWorkStealingPool(Runtime.getRuntime().availableProcessors() - NUMBER_OF_RING_INSTANCES)
+    )
+  ) ++ zio.Runtime.setBlockingExecutor(zio.Executor.fromJavaExecutor(Executors.newCachedThreadPool()))
 
   val filter: WebFilter[Any] = (request: Request) =>
     ZIO.attempt(
@@ -55,7 +62,12 @@ object MyApp extends ZIOAppDefault {
       val c1 = Cookie("testCookie1", "ABCD", secure = true)
       val c2 = Cookie("testCookie2", "ABCDEFG", secure = false)
       val c3 =
-        Cookie("testCookie3", "1A8BD0FC645E0", secure = false, expires = Some(java.time.ZonedDateTime.now.plusHours(5)))
+        Cookie(
+          "testCookie3",
+          "1A8BD0FC645E0",
+          secure = false,
+          expires = Some(java.time.ZonedDateTime.now.plusHours(5))
+        )
 
       ZIO.succeed(
         Response
@@ -153,7 +165,6 @@ object MyApp extends ZIOAppDefault {
   }
 
   def run = {
-    val IOU_RINGS = 1
     val env = ZLayer.fromZIO(ZIO.succeed("Hello ZIO World!"))
     (for {
       args <- this.getArgs
@@ -170,7 +181,7 @@ object MyApp extends ZIOAppDefault {
         ctx, /*2097152,*/
         onConnect = onConnect,
         onDisconnect = onDisconnect
-      ).startIO(R, filter, sync = false)
+      ).startIO_linuxOnly(NUMBER_OF_RING_INSTANCES, R, filter) // , sync = false)
 
     } yield (exitCode)).provideSomeLayer(env)
   }

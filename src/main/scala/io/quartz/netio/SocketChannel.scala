@@ -17,6 +17,9 @@ object SocketChannel {
 
 class SocketChannel(val socket: Socket) extends IOChannel {
 
+  def readBuffer( dst: ByteBuffer,timeOut: Int ): Task[Int] = ???
+  def put(bb: ByteBuffer): Task[Unit] = ???
+
   def read(timeOut: Int): Task[Chunk[Byte]] =
     for {
       _ <- ZIO.attempt(socket.setSoTimeout(timeOut))
