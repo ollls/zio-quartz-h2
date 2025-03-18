@@ -566,7 +566,6 @@ class QuartzH2Server[Env](
       keepAliveMs: Int
   ): ZIO[Env, Throwable, ExitCode] = {
     for {
-
       addr <- ZIO.attempt(new InetSocketAddress(HOST, PORT))
       _ <- ZIO.logInfo(s"HTTP/2 TLS Service: QuartzH2 (async - linux io-uring with $rings ring instance(s))")
       _ <- ZIO.logInfo(s"Concurrency level(max threads): $maxThreadNum, max streams per conection: $maxStreams")
@@ -583,7 +582,7 @@ class QuartzH2Server[Env](
       rings <- IoUringTbl(this, rings)
       _ <- ctrlC_handlerZIO_withConnect(rings)
 
-      serverSocket <- ZIO.succeed(new IoUringServerSocket(PORT))
+      serverSocket <- ZIO.succeed(new IoUringServerSocket(HOST, PORT))
       acceptURing <- ZIO.succeed(new IoUring(512))
       loop = for {
         _ <- ZIO.logDebug("Wait on accept")
@@ -636,7 +635,6 @@ class QuartzH2Server[Env](
       keepAliveMs: Int
   ): ZIO[Env, Throwable, ExitCode] = {
     for {
-
       addr <- ZIO.attempt(new InetSocketAddress(HOST, PORT))
       _ <- ZIO.logInfo(s"HTTP/2 h2c Service: QuartzH2 (async - linux io-uring with $rings ring instance(s))")
       _ <- ZIO.logInfo(s"Concurrency level(max threads): $maxThreadNum, max streams per conection: $maxStreams")
@@ -650,7 +648,7 @@ class QuartzH2Server[Env](
       rings <- IoUringTbl(this, rings)
       _ <- ctrlC_handlerZIO_withConnect(rings)
 
-      serverSocket <- ZIO.succeed(new IoUringServerSocket(PORT))
+      serverSocket <- ZIO.succeed(new IoUringServerSocket(HOST, PORT))
       acceptURing <- ZIO.succeed(new IoUring(512))
       loop = for {
         _ <- ZIO.logDebug("Wait on accept")

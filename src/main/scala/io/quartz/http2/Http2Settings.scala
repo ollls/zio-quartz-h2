@@ -1,12 +1,11 @@
- package io.quartz.http2
+package io.quartz.http2
 
 import io.quartz.http2.Constants._
 import java.nio.ByteBuffer
 
-
 object Http2Settings {
 
-  def copy( out: Http2Settings, in: Http2Settings): Http2Settings = {
+  def copy(out: Http2Settings, in: Http2Settings): Http2Settings = {
     out.ENABLE_PUSH = in.ENABLE_PUSH
     out.HEADER_TABLE_SIZE = in.HEADER_TABLE_SIZE
     out.INITIAL_WINDOW_SIZE = in.INITIAL_WINDOW_SIZE
@@ -38,7 +37,7 @@ class Http2Settings {
     * specific to the header compression format inside a header block.
     */
   var HEADER_TABLE_SIZE: Int = 4096
-  //var HEADER_TABLE_SIZE: Int = 65536
+  // var HEADER_TABLE_SIZE: Int = 65536
 
   /** This setting can be used to disable server push (Section 8.2). */
   var ENABLE_PUSH: Int = 0
@@ -154,7 +153,7 @@ class Http2Settings {
       case SettingsTypes.INITIAL_WINDOW_SIZE  => INITIAL_WINDOW_SIZE = value
       case SettingsTypes.MAX_FRAME_SIZE       => MAX_FRAME_SIZE = value
       case SettingsTypes.MAX_HEADER_LIST_SIZE => MAX_HEADER_LIST_SIZE = value
-      //case _                                  => println("MATCH ERROR")
+      case _                                  => () // ignore uknown frames, new 2025 Sfari type 8 and 9 ???
     }
 
   }
