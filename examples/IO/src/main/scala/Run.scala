@@ -16,6 +16,7 @@ import ch.qos.logback.classic.Level
 import zio.logging.LogFormat
 import zio.logging.backend.SLF4J
 import zio.LogLevel
+import io.quartz.util.HttpRangeRequest
 
 import io.quartz.util.MultiPart
 import io.quartz.http2.model.StatusCode
@@ -130,6 +131,17 @@ object MyApp extends ZIOAppDefault {
         .asStream(ZStream.fromFile(jpath, BLOCK_SIZE))
         .contentType(ContentType.contentTypeFromFileName(FILE)))
 
+    // Any regular file or mp4 videos wih Http Range.
+    // Ranged Video streaming tested with Firefox,Safari,Chrome
+    case req @ GET -> Root / StringVar(file) =>
+      val FOLDER_PATH = "web_root/"
+      val FILE = s"$file"
+      val BLOCK_SIZE = 32000
+      for {
+        jpath <- ZIO.succeed(new java.io.File(FOLDER_PATH + FILE))
+      } yield (HttpRangeRequest.makeResponse(req, jpath, ContentType.Video_MP4, BLOCK_SIZE))
+
+    /* older no http ranged support - just FYI
     case GET -> Root / StringVar(file) =>
       val FOLDER_PATH = "web_root/"
       val FILE = s"$file"
@@ -141,7 +153,7 @@ object MyApp extends ZIOAppDefault {
       } yield (Response
         .Ok()
         .asStream(ZStream.fromFile(jpath, BLOCK_SIZE))
-        .contentType(ContentType.contentTypeFromFileName(FILE)))
+        .contentType(ContentType.contentTypeFromFileName(FILE))) */
   }
 
   def onConnect(id: Long) = {
@@ -155,9 +167,15 @@ object MyApp extends ZIOAppDefault {
   def run = {
     val env = ZLayer.fromZIO(ZIO.succeed("Hello ZIO World!"))
     (for {
-      _ <- zio.Console.printLine("****************************************************************************************")
-      _ <- zio.Console.printLine("\u001B[31mUse https://localhost:8443/doc/index.html to read the index.html file\u001B[0m")
-      _ <- zio.Console.printLine("****************************************************************************************")
+      _ <- zio.Console.printLine(
+        "****************************************************************************************"
+      )
+      _ <- zio.Console.printLine(
+        "\u001B[31mUse https://localhost:8443/doc/index.html to read the index.html file\u001B[0m"
+      )
+      _ <- zio.Console.printLine(
+        "****************************************************************************************"
+      )
 
       args <- this.getArgs
       _ <- ZIO.when(args.find(_ == "--debug").isDefined)(ZIO.attempt(QuartzH2Server.setLoggingLevel(Level.DEBUG)))
@@ -167,6 +185,7 @@ object MyApp extends ZIOAppDefault {
 
       ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
       exitCode <- new QuartzH2Server(
+        //"10.0.0.6",
         "localhost",
         8443,
         16000,
