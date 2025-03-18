@@ -2,6 +2,8 @@
 
 [![Generic badge](https://img.shields.io/badge/zio--quartz--h2-0.6.0-blue)](https://repo1.maven.org/maven2/io/github/ollls/zio-quartz-h2_3/0.6.0)
 
+https://ollls.github.io/zio-quartz-h2-doc/
+
 # Asynchronous HTTP/2 TLS packet streaming server/client with multiple I/O options
 It now supports HTTP/1.1 and IO-Uring on Linux platforms
 
