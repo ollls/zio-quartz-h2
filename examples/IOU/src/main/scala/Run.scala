@@ -174,6 +174,9 @@ object MyApp extends ZIOAppDefault {
         "\u001B[31mUse https://localhost:8443/doc/index.html to read the index.html file\u001B[0m"
       )
       _ <- zio.Console.printLine(
+        "\u001B[31mUse https://localhost:8443/mov_bbb.mp4 to play a media file\u001B[0m"
+      )
+      _ <- zio.Console.printLine(
         "****************************************************************************************"
       )
       args <- this.getArgs
@@ -184,7 +187,7 @@ object MyApp extends ZIOAppDefault {
 
       ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
       exitCode <- new QuartzH2Server(
-        //"10.0.0.6",
+        // "10.0.0.6",
         "localhost",
         8443,
         16000,
