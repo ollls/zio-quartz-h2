@@ -358,8 +358,12 @@ class TLSChannel(val ctx: SSLContext, val rch: IOChannel) extends IOChannel {
     result
   }
 
+   final def close(): Task[Unit] = {
+    rch.close()
+   } 
+
   // close with TLS close_notify
-  final def close(): Task[Unit] = {
+  final def closeTLSNotify(): Task[Unit] = {
     val result = for {
       _ <- ZIO.attempt(f_SSL.engine.getSession().invalidate())
       _ <- f_SSL.closeOutbound()

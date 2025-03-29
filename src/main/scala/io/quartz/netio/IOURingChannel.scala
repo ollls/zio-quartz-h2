@@ -30,7 +30,7 @@ object IOURingChannel {
     for {
       result <- ZIO.asyncZIO[Any, Throwable, (IoUring, IoUringSocket)](cb =>
         for {
-          f1 <- ZIO.succeed((ring: IoUring, socket: IoUringSocket) => cb(ZIO.succeed(ring, socket)))
+          f1 <- ZIO.succeed((ring: IoUring, socket: IoUringSocket) => { cb(ZIO.succeed(ring, socket)) } ) 
           _ <- ZIO.attempt(ioUringAccept(ring, serverSocket, f1))
         } yield (Some(ZIO.unit))
       )
@@ -75,7 +75,10 @@ class IOURingChannel(val ring: IoUringEntry, val ch1: IoUringSocket, var timeOut
       ZIO
         .attempt(op(ring, ch))
         .flatMap(handler => {
-          val f1: A => Unit = bb => { cb(ZIO.succeed(bb)) }
+          val f1: A => Unit = bb => {
+            if (bb == null) cb(ZIO.fail(new java.nio.channels.ClosedChannelException))
+            else cb(ZIO.succeed(bb))
+          }
           // todo: investigate how to catch error
           handler(f1)
         })
@@ -132,7 +135,7 @@ class IOURingChannel(val ring: IoUringEntry, val ch1: IoUringSocket, var timeOut
           ZIO.succeed(dst.put(f_putBack)) *> ZIO.succeed { f_putBack = null }
         } else ZIO.unit
       b1 <- effectAsyncChannelIO[ByteBuffer](ring, ch1)((ring, ch1) => ioUringReadIO(ring, ch1, dst, _))
-        //.race(ZIO.sleep(Duration(timeOut, TimeUnit.MILLISECONDS)).map(_ => ByteBuffer.allocate(0)))
+      // .race(ZIO.sleep(Duration(timeOut, TimeUnit.MILLISECONDS)).map(_ => ByteBuffer.allocate(0)))
       n <- ZIO.succeed(b1.position())
       _ <- ZIO.fail(new java.nio.channels.ClosedChannelException).when(n <= 0)
 
@@ -144,17 +147,39 @@ class IOURingChannel(val ring: IoUringEntry, val ch1: IoUringSocket, var timeOut
       // _ <- ZIO.succeed(this.timeOutMs(timeOutMs0))
       bb <- ZIO.succeed(ByteBuffer.allocateDirect(TCPChannel.HTTP_READ_PACKET))
       b1 <- effectAsyncChannelIO[ByteBuffer](ring, ch1)((ring, ch1) => ioUringReadIO(ring, ch1, bb, _))
-      _ <- ZIO.fail(new java.nio.channels.ClosedChannelException).when(b1.position == 0)
+      _ <- ZIO.fail(new java.nio.channels.ClosedChannelException).when(b1 == null || b1.position == 0)
     } yield (Chunk.fromByteBuffer(b1.flip))
+  }
+
+  private def writeBuf(buffer: ByteBuffer): Task[ByteBuffer] = {
+    for {
+      b1 <- effectAsyncChannelIO[ByteBuffer](ring, ch1)((ring, ch1) => ioUringWriteIO(ring, ch1, buffer, _))
+      _ <- ZIO.fail(new java.nio.channels.ClosedChannelException).when(b1 == null || b1.position == 0)
+    } yield (b1)
   }
 
   def write(buffer: ByteBuffer): Task[Int] = {
     for {
-      b1 <- effectAsyncChannelIO[ByteBuffer](ring, ch1)((ring, ch1) => ioUringWriteIO(ring, ch1, buffer, _))
-    } yield (b1.position())
+      b <- writeBuf(buffer).repeatUntil((b1 => b1.remaining() <= 0))
+    } yield (b.position())
   }
 
-  def close(): Task[Unit] = ZIO.succeed(ch1.close())
+  def close() = for {
+    result <- ZIO.asyncZIO[Any, Throwable, Unit](cb =>
+      for {
+        r <- ZIO.succeed(new Runnable {
+          override def run() = {
+            // close on socket fd, will be called in EVENT_HANDLER
+            // then EVENT_HANDLER:close will call onClose call back <- this is how we get here
+            cb(ZIO.unit)
+          }
+        })
+        _ <- ring.queueClose(r, ch1)
+      } yield (Some(ZIO.unit))
+    )
+  } yield ()
+
+  def closeSync(): Task[Unit] = ZIO.succeed(ch1.close())
   def secure() = false
   // used in TLS mode to pass parameter from SNI tls extension
   def remoteAddress(): Task[SocketAddress] = ???
