@@ -184,8 +184,8 @@ object MyApp extends ZIOAppDefault {
 
       ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
       exitCode <- new QuartzH2Server(
-        "10.0.0.6",
-        //"localhost",
+        //"10.0.0.6",
+        "localhost",
         8443,
         16000,
         ctx, /*2097152,*/
