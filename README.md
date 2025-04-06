@@ -1,6 +1,6 @@
 <img src="quartz-h2.jpeg" width="84" title="quartz-h2"/>
 
-[![Generic badge](https://img.shields.io/badge/zio--quartz--h2-0.6.0-blue)](https://repo1.maven.org/maven2/io/github/ollls/zio-quartz-h2_3/0.6.0)
+[![Generic badge](https://img.shields.io/badge/zio--quartz--h2-0.6.0-blue)](https://repo1.maven.org/maven2/io/github/ollls/zio-quartz-h2_3/0.7)
 
 https://ollls.github.io/zio-quartz-h2-doc/
 
@@ -16,7 +16,7 @@ ZIO2 native, asynchronous implementation of HTTP/2 packet streaming server with 
 - **Synchronous Mode**: Traditional blocking Java sockets for specific use cases
 
 ``` 
-libraryDependencies += "io.github.ollls" %% "zio-quartz-h2" % "0.6.0"
+libraryDependencies += "io.github.ollls" %% "zio-quartz-h2" % "0.7"
 ```
 
 to run example from zio-quartz-h2 code base directly
