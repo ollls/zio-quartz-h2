@@ -1,6 +1,6 @@
 <img src="quartz-h2.jpeg" width="84" title="quartz-h2"/>
 
-[![Generic badge](https://img.shields.io/badge/zio--quartz--h2-0.6.0-blue)](https://repo1.maven.org/maven2/io/github/ollls/zio-quartz-h2_3/0.7)
+[![Generic badge](https://img.shields.io/badge/zio--quartz--h2-0.7-blue)](https://repo1.maven.org/maven2/io/github/ollls/zio-quartz-h2_3/0.7)
 
 https://ollls.github.io/zio-quartz-h2-doc/
 
