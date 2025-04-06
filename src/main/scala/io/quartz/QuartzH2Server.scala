@@ -566,13 +566,14 @@ class QuartzH2Server[Env](
       keepAliveMs: Int
   ): ZIO[Env, Throwable, ExitCode] = {
     for {
-      addr <- ZIO.attempt(new InetSocketAddress(HOST, PORT))
+      // addr <- ZIO.attempt(new InetSocketAddress(PORT))
       _ <- ZIO.logInfo(s"HTTP/2 TLS Service: QuartzH2 (async - linux io-uring with $rings ring instance(s))")
       _ <- ZIO.logInfo(s"Concurrency level(max threads): $maxThreadNum, max streams per conection: $maxStreams")
       _ <- ZIO.logInfo(s"H2 Idle Timeout: $keepAliveMs Ms")
-      _ <- ZIO.logInfo(
-        s"Listens: ${addr.getHostString()}:${addr.getPort().toString()}"
-      )
+      _ <- ZIO.logInfo(s"$HOST:$PORT")
+      // _ <- ZIO.logInfo(
+      //  s"Listens: ${addr.getHostString()}:${addr.getPort().toString()}"
+      // )
 
       conId <- Ref.make(0L)
 
@@ -596,7 +597,7 @@ class QuartzH2Server[Env](
         c <- ZIO
           .succeed(TLSChannel(sslCtx, ch))
           .flatMap(c => c.ssl_init_h2().map((c, _)))
-          .catchAll(e => ch.close().ignore *> ZIO.succeed(rings.release(ring)) *> ZIO.fail(e))
+          .catchAll(e => ch.closeSync().ignore *> ZIO.succeed(rings.release(ring)) *> ZIO.fail(e))
 
         _ <- ZIO.logInfo(
           s"${c._1.ctx.getProtocol()} ${tlsPrint(c._1)} ${c._1.f_SSL.engine
@@ -635,20 +636,18 @@ class QuartzH2Server[Env](
       keepAliveMs: Int
   ): ZIO[Env, Throwable, ExitCode] = {
     for {
-      addr <- ZIO.attempt(new InetSocketAddress(HOST, PORT))
       _ <- ZIO.logInfo(s"HTTP/2 h2c Service: QuartzH2 (async - linux io-uring with $rings ring instance(s))")
       _ <- ZIO.logInfo(s"Concurrency level(max threads): $maxThreadNum, max streams per conection: $maxStreams")
       _ <- ZIO.logInfo(s"H2 Idle Timeout: $keepAliveMs Ms")
-      _ <- ZIO.logInfo(
-        s"Listens: ${addr.getHostString()}:${addr.getPort().toString()}"
-      )
-
+      _ <- ZIO.logInfo(HOST)
+  
       conId <- Ref.make(0L)
 
       rings <- IoUringTbl(this, rings)
       _ <- ctrlC_handlerZIO_withConnect(rings)
 
       serverSocket <- ZIO.succeed(new IoUringServerSocket(HOST, PORT))
+
       acceptURing <- ZIO.succeed(new IoUring(512))
       loop = for {
         _ <- ZIO.logDebug("Wait on accept")

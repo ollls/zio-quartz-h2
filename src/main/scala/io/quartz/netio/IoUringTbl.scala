@@ -30,9 +30,16 @@ case class IoUringEntry(
 ) {
 
   def close = for {
-    //_ <- ZIO.succeed(ring.close())
+    // _ <- ZIO.succeed(ring.close())
     _ <- q.shutdown
   } yield ()
+
+  def queueClose(run: Runnable, channel: IoUringSocket): Task[Unit] =
+    for {
+      _ <- ZIO.succeed(channel.onClose(run))
+      queueCloseIO <- ZIO.succeed(ZIO.succeed(ring.queueClose(channel)))
+      _ <- q.offer(queueCloseIO.unit)
+    } yield ()
 
   /** Synchronized wrapper for IoUring's queueRead method.
     *
@@ -140,8 +147,8 @@ class IoUringTbl(entries: List[IoUringEntry]) {
   def size: Int = entries.size
 
   def closeIoURings = {
-    ZIO.succeed( IoUringTbl.shutdown = true) *> 
-    ZIO.foreach( entries )( _.close)
+    ZIO.succeed(IoUringTbl.shutdown = true) *>
+      ZIO.foreach(entries)(_.close)
   }
 }
 
@@ -185,7 +192,7 @@ object IoUringTbl {
 
   def submitProcessor(entry: IoUringEntry): Task[Unit] = {
     val processSubmit = for {
-      fiber <- ZIO.descriptor
+      //fiber <- ZIO.descriptor
       queueOpIO <- entry.q.take
       _ <- queueOpIO *> ZIO.succeed(entry.ring.submit())
     } yield ()
@@ -214,7 +221,7 @@ object IoUringTbl {
     *   IO containing a new IoUringTbl
     */
   def apply[Env](server: QuartzH2Server[Env], count: Int, ringSize: Int = 1024): Task[IoUringTbl] = {
-    IoUringTbl.shutdown = false //important for tests
+    IoUringTbl.shutdown = false // important for tests
     ZIO.succeed(setServer(server)) *>
       ZIO
         .foreach(0 until count)(_ =>
@@ -229,8 +236,8 @@ object IoUringTbl {
           // Start a processor for each IoUringEntry
           ZIO
             .foreach(entries) { entry =>
-              submitProcessor(entry).fork *> ZIO.blocking{getCqesProcessor(entry)}.fork
-              //ZIO.blocking(submitProcessor(entry)).fork *> ZIO.blocking{getCqesProcessor(entry)}.fork
+              submitProcessor(entry).fork *> ZIO.blocking { getCqesProcessor(entry) }.fork
+            // ZIO.blocking(submitProcessor(entry)).fork *> ZIO.blocking{getCqesProcessor(entry)}.fork
             }
             .as(tbl)
         }

@@ -151,21 +151,9 @@ object MyApp extends ZIOAppDefault {
       val BLOCK_SIZE = 32000
       for {
         jpath <- ZIO.succeed(new java.io.File(FOLDER_PATH + FILE))
-      } yield (HttpRangeRequest.makeResponse(req, jpath, ContentType.Video_MP4, BLOCK_SIZE))
-
-    /* older no http ranged support - just FYI
-    case GET -> Root / StringVar(file) =>
-      val FOLDER_PATH = "web_root/"
-      val FILE = s"$file"
-      val BLOCK_SIZE = 1024 * 14
-      for {
-        jpath <- ZIO.attempt(new java.io.File(FOLDER_PATH + FILE))
         present <- ZIO.attempt(jpath.exists())
         _ <- ZIO.fail(new java.io.FileNotFoundException(jpath.toString())).when(present == false)
-      } yield (Response
-        .Ok()
-        .asStream(ZStream.fromFile(jpath, BLOCK_SIZE))
-        .contentType(ContentType.contentTypeFromFileName(FILE)))*/
+      } yield (HttpRangeRequest.makeResponse(req, jpath, ContentType.Video_MP4, BLOCK_SIZE))
   }
 
   def onConnect(id: Long) = {
@@ -186,6 +174,9 @@ object MyApp extends ZIOAppDefault {
         "\u001B[31mUse https://localhost:8443/doc/index.html to read the index.html file\u001B[0m"
       )
       _ <- zio.Console.printLine(
+        "\u001B[31mUse https://localhost:8443/mov_bbb.mp4 to play a media file\u001B[0m"
+      )
+      _ <- zio.Console.printLine(
         "****************************************************************************************"
       )
       args <- this.getArgs
@@ -196,7 +187,7 @@ object MyApp extends ZIOAppDefault {
 
       ctx <- QuartzH2Server.buildSSLContext("TLS", "keystore.jks", "password")
       exitCode <- new QuartzH2Server(
-        //"10.0.0.6",
+        // "10.0.0.6",
         "localhost",
         8443,
         16000,
