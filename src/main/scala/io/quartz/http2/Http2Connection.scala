@@ -729,11 +729,6 @@ class Http2Connection[Env](
                 )
               )((b => sendFrame(b)))
             }
-            /*
-            _ <- hSem.acquire.bracket { _ =>
-              headerFrame(streamId, Priority.NoPriority, endStreamInHeaders, response.headers)
-                .traverse(b => sendFrame(b))
-            }(_ => hSem.release) */
 
             pref <- Ref.make[Chunk[Byte]](Chunk.empty[Byte])
 
@@ -755,12 +750,32 @@ class Http2Connection[Env](
               else ZIO.unit
 
             lastChunk <- pref.get
-            _ <- (ZIO
-              .when(endStreamInHeaders == false)(
-                ZIO.foreach(dataFrame(settings, streamId, true, ByteBuffer.wrap(lastChunk.toArray)))(b =>
-                  sendDataFrame(streamId, b)
-                )
-              ))
+
+            _ <- response.trailers match {
+              case Some(trailers) =>
+                ZIO.logTrace("trailers: " + trailers.printHeaders(" | ")) *>
+                  ZIO.when(endStreamInHeaders == false)(
+                    ZIO.foreach(dataFrame(settings, streamId, false, ByteBuffer.wrap(lastChunk.toArray)))(b =>
+                      sendDataFrame(streamId, b)
+                    )
+                  ) *> ZIO.foreach(
+                    headerFrame(
+                      streamId,
+                      settings,
+                      Priority.NoPriority,
+                      endStream = true,
+                      headerEncoder,
+                      trailers
+                    )
+                  )((b => sendFrame(b)))
+              case None =>
+                ZIO.logTrace("trailers: None") *> ZIO
+                  .when(endStreamInHeaders == false)(
+                    ZIO.foreach(dataFrame(settings, streamId, true, ByteBuffer.wrap(lastChunk.toArray)))(b =>
+                      sendDataFrame(streamId, b)
+                    )
+                  )
+            }
 
             _ <- ZIO.when(endStreamInHeaders == true)(updateStreamWith(10, streamId, c => c.done.succeed(()).unit))
 
@@ -808,22 +823,24 @@ class Http2Connection[Env](
     _ <- Http2Connection
       .makePacketStream(ch, HTTP2_KEEP_ALIVE_MS, leftOver)
       .foreach(packet => { packet_handler(httpReq11, packet) })
-  } yield ()).catchAll {
-    case e @ TLSChannelError(_) =>
-      ZIO.logDebug(s"connid = ${this.id} ${e.toString} ${e.getMessage()}") *>
-        ZIO.logError(s"connId=${this.id} ${e.toString()}")
-    case e: java.nio.channels.ClosedChannelException =>
-      ZIO.logInfo(s"Connection connId=${this.id} closed by remote")
-    case e @ ErrorGen(streamId, code, name) =>
-      ZIO.logError(s"Forced disconnect connId=${this.id} code=${e.code} ${name}") *>
-        sendFrame(Frames.mkGoAwayFrame(streamId, code, name.getBytes)).unit
-    case e @ _ => {
-      ZIO.logError(e.toString())
+  } yield ())
+    .catchAll {
+      case e @ TLSChannelError(_) =>
+        ZIO.logDebug(s"connid = ${this.id} ${e.toString} ${e.getMessage()}") *>
+          ZIO.logError(s"connId=${this.id} ${e.toString()}")
+      case e: java.nio.channels.ClosedChannelException =>
+        ZIO.logInfo(s"Connection connId=${this.id} closed by remote")
+      case e @ ErrorGen(streamId, code, name) =>
+        ZIO.logError(s"Forced disconnect connId=${this.id} code=${e.code} ${name}") *>
+          sendFrame(Frames.mkGoAwayFrame(streamId, code, name.getBytes)).unit
+      case e @ _ => {
+        ZIO.logError(e.toString())
+      }
     }
-  }.catchAllDefect { throwable =>
-  ZIO.logError(s"Unexpected error: ${throwable.getMessage}")
-  //ZIO.fail(SystemFailure(throwable))
-}
+    .catchAllDefect { throwable =>
+      ZIO.logError(s"Unexpected error: ${throwable.getMessage}")
+    // ZIO.fail(SystemFailure(throwable))
+    }
 
   ////////////////////////////////////////////////////
   def packet_handler(
