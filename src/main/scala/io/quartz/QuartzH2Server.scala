@@ -142,6 +142,7 @@ class QuartzH2Server[Env](
           println("abort")
           // for async wait this is all we need
           shutdownFlag = true
+          Runtime.getRuntime().halt(0);
         }
       })
   )
