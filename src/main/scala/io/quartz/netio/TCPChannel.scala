@@ -133,11 +133,7 @@ class TCPChannel(val ch: AsynchronousSocketChannel) extends IOChannel {
     for {
       bb <- ZIO.attempt(ByteBuffer.allocate(TCPChannel.HTTP_READ_PACKET))
 
-      n <- TCPChannel.effectAsyncChannel[AsynchronousSocketChannel, Integer](
-        ch
-      )(c => c.read(bb, timeOut, TimeUnit.MILLISECONDS, (), _))
-
-      _ <- ZIO.fail(new java.nio.channels.ClosedChannelException).when(n < 0)
+      _ <- readBuffer(bb, timeOut)
 
       chunk <- ZIO.attempt(Chunk.fromByteBuffer(bb.flip))
 
