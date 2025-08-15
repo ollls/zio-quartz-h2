@@ -188,19 +188,19 @@ You should get:
 Finished in 2.1959 seconds
 94 tests, 94 passed, 0 skipped, 0 failed<br>
 ```
-### Performance test with h2load.
+### Performance test with h2load on AMD Ryzen 9 9950X 16-Core Processor
 
 ```
-h2load -D10 -c68 -m30 -t2 https://localhost:8443/test
-
+h2load -D10 -c62 -m30  https://localhost:8443/test
 ...
 
-finished in 10.01s, 65292.20 req/s, 637.89KB/s
-requests: 652922 total, 654452 started, 652922 done, 652922 succeeded, 0 failed, 0 errored, 0 timeout
-status codes: 652922 2xx, 0 3xx, 0 4xx, 0 5xx
-traffic: 6.23MB (6531974) total, 637.62KB (652922) headers (space savings 90.00%), 0B (0) data
+finished in 10.00s, 227093.60 req/s, 2.17MB/s
+requests: 2270936 total, 2272796 started, 2270936 done, 2270936 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 2270936 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 21.66MB (22712708) total, 2.17MB (2270936) headers (space savings 90.00%), 0B (0) data
                      min         max         mean         sd        +/- sd
-time for request:      231us    144.82ms     19.31ms     10.02ms    73.06%
-time for connect:     7.39ms    860.22ms    385.69ms    278.36ms    54.90%
-time to 1st byte:     9.10ms    875.77ms    398.01ms    282.96ms    54.90%
-req/s           :       0.00     1489.99      959.99      563.28    75.00%
+time for request:       75us     87.58ms      7.93ms      5.01ms    88.53%
+time for connect:     6.64ms       1.08s    235.72ms    363.29ms    83.87%
+time to 1st byte:    47.58ms       1.13s    277.72ms    363.75ms    83.87%
+req/s           :    3249.70     3872.66     3662.31      176.64    79.03%
+
